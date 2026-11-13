@@ -2,9 +2,9 @@
 -- SQL editor once. ADDITIVE ONLY: every object is garmin_-prefixed and
 -- IF NOT EXISTS, so nothing here drops or alters your existing tables.
 --
--- The daily pull in github.com/aaronparton2-sketch/garmin-claude-coach writes
--- to these same four tables. Then set GARMIN_SUPABASE_URL +
--- GARMIN_SUPABASE_SERVICE_ROLE_KEY for the dashboard and it reads them.
+-- The ETL in etl/load_export.py writes to these tables; the dashboard reads
+-- them server-side with GARMIN_SUPABASE_SECRET_KEY. No anon/authenticated
+-- role can read anything here (see the revokes at the bottom).
 --
 -- Units are normalised by the ETL (grams->kg, ms->seconds) so columns are
 -- already human-readable.
@@ -91,40 +91,14 @@ create table if not exists garmin_daily_summary (
 create index if not exists idx_garmin_daily_summary_date on garmin_daily_summary (summary_date desc);
 
 -- ===========================================================================
--- ROW LEVEL SECURITY — allow the publishable (anon) key to READ only.
--- Writes happen server-side via the service_role key (ETL + n8n).
+-- ROW LEVEL SECURITY. No policies are created: only the server-side secret
+-- key (which bypasses RLS) may read these tables. The revokes at the bottom
+-- make this explicit against anon / authenticated.
 -- ===========================================================================
 alter table garmin_weigh_ins      enable row level security;
 alter table garmin_activities     enable row level security;
 alter table garmin_sleep          enable row level security;
 alter table garmin_daily_summary  enable row level security;
-
-do $$
-begin
-  if not exists (select 1 from pg_policies where tablename='garmin_weigh_ins' and policyname='garmin_weigh_ins_read') then
-    create policy garmin_weigh_ins_read on garmin_weigh_ins for select to anon using (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='garmin_activities' and policyname='garmin_activities_read') then
-    create policy garmin_activities_read on garmin_activities for select to anon using (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='garmin_sleep' and policyname='garmin_sleep_read') then
-    create policy garmin_sleep_read on garmin_sleep for select to anon using (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='garmin_daily_summary' and policyname='garmin_daily_summary_read') then
-    create policy garmin_daily_summary_read on garmin_daily_summary for select to anon using (true);
-  end if;
-end $$;
-
--- ===========================================================================
--- VIEWS
--- ===========================================================================
-create or replace view garmin_v_weight_trend as
-select
-    measured_date as date, weight_kg, body_fat_pct, muscle_mass_kg, body_water_pct, bmi,
-    round(avg(weight_kg)    over (order by measured_date rows between 6 preceding and current row), 2) as weight_kg_7pt,
-    round(avg(body_fat_pct) over (order by measured_date rows between 6 preceding and current row), 1) as body_fat_pct_7pt
-from garmin_weigh_ins
-order by measured_date;
 
 -- ===========================================================================
 -- DEXA SCANS (optional) — reference body-composition scans the Body Comp page
@@ -155,4 +129,14 @@ create table if not exists dexa_scans (
 );
 alter table dexa_scans enable row level security;
 -- No anon policy on purpose: the dashboard reads it through /api/data with the
--- service_role key. Blood panels live in sql/blood_panels.sql, same rule.
+-- secret key. Blood panels live in sql/blood_panels.sql, same rule.
+
+-- ===========================================================================
+-- Revoke all grants from anon + authenticated. RLS plus these revokes mean
+-- only the secret key (which bypasses both) can read anything.
+-- ===========================================================================
+revoke all on garmin_weigh_ins     from anon, authenticated;
+revoke all on garmin_activities    from anon, authenticated;
+revoke all on garmin_sleep         from anon, authenticated;
+revoke all on garmin_daily_summary from anon, authenticated;
+revoke all on dexa_scans           from anon, authenticated;

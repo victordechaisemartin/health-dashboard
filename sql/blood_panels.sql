@@ -31,19 +31,7 @@ comment on table public.blood_panels is
 create index if not exists blood_panels_date_idx on public.blood_panels (panel_date desc);
 
 -- RLS on, and NO anon policy. The dashboard reads this through /api/data using
--- the service_role key, which bypasses RLS. Adding an anon read policy would
--- expose it to the anon key, which is exactly what the deploy setup avoids.
+-- the secret key, which bypasses RLS.
 alter table public.blood_panels enable row level security;
 
-do $$
-begin
-  if not exists (
-    select 1 from pg_policies
-    where schemaname = 'public' and tablename = 'blood_panels'
-      and policyname = 'blood_panels_service_role_all'
-  ) then
-    create policy blood_panels_service_role_all
-      on public.blood_panels for all to service_role
-      using (true) with check (true);
-  end if;
-end $$;
+revoke all on public.blood_panels from anon, authenticated;
