@@ -1,17 +1,25 @@
 // AI coach chat. Same auth rules as /api/data, reads a small window of recent
-// data (Supabase when configured, otherwise the sample set) and asks Claude to
-// answer as a training coach. Read-only: no write path exists here, and the
-// Anthropic key stays server-side.
+// data and asks Claude to answer as a training coach. Read-only: no write
+// path exists here, and the Anthropic key stays server-side.
 //
 // Without ANTHROPIC_API_KEY the route answers { setup: true } and the widget
-// shows how to add one. It never errors in the demo.
-import { authorised, loadBundle } from "./_bundle.js";
+// shows how to add one.
+import { authorised, isGated, loadBundle, missingConfig, NotConfiguredError } from "./_bundle.js";
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "method" });
+    return;
+  }
+  if (process.env.VERCEL && !isGated()) {
+    res.status(401).json({ error: "unprotected", detail: "Set GH_PASSWORD on the deployment." });
+    return;
+  }
+  const missing = missingConfig();
+  if (missing.length) {
+    res.status(503).json({ error: "not_configured", missing });
     return;
   }
   if (!authorised(req)) {
@@ -63,6 +71,10 @@ export default async function handler(req, res) {
       })),
     });
   } catch (e) {
+    if (e instanceof NotConfiguredError) {
+      res.status(503).json({ error: "not_configured", missing: e.missing });
+      return;
+    }
     res.status(502).json({ error: "upstream", detail: String(e) });
     return;
   }

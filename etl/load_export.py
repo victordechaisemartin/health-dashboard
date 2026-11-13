@@ -8,8 +8,8 @@ Usage:
     python etl/load_export.py --export "..." --supabase --only weigh_ins        # one table only
 
 Supabase creds are read from env (or a .env in the project root):
-    GARMIN_SUPABASE_URL              e.g. https://abcd.supabase.co
-    GARMIN_SUPABASE_SERVICE_ROLE_KEY service_role key (server-side only)
+    GARMIN_SUPABASE_URL           e.g. https://abcd.supabase.co
+    GARMIN_SUPABASE_SECRET_KEY    sb_secret_... key (server-side only)
 
 Units are normalised here so the DB columns are human-readable:
     weight / muscle / bone : grams -> kg
@@ -186,9 +186,9 @@ def upsert(table, rows, url, key):
     if not rows:
         return 0
     endpoint = f"{url.rstrip('/')}/rest/v1/garmin_{table}?on_conflict={CONFLICT[table]}"
+    # sb_secret_* keys bypass RLS via `apikey` alone; no Authorization header needed.
     headers = {
         "apikey": key,
-        "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
         "Prefer": "resolution=merge-duplicates,return=minimal",
     }
@@ -244,9 +244,9 @@ def main():
 
     if args.supabase:
         url = os.environ.get("GARMIN_SUPABASE_URL")
-        key = os.environ.get("GARMIN_SUPABASE_SERVICE_ROLE_KEY")
+        key = os.environ.get("GARMIN_SUPABASE_SECRET_KEY")
         if not url or not key:
-            sys.exit("\n! Set GARMIN_SUPABASE_URL + GARMIN_SUPABASE_SERVICE_ROLE_KEY (env or project .env)")
+            sys.exit("\n! Set GARMIN_SUPABASE_URL + GARMIN_SUPABASE_SECRET_KEY (env or project .env)")
         print("\n  Upserting to Supabase...")
         for t in tables:
             n = upsert(t, results[t], url, key)

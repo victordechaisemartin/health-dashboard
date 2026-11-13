@@ -1,25 +1,30 @@
 // Shared by /api/data and /api/chat.
 //
-// Two modes, picked by env:
-//   LIVE   - GARMIN_SUPABASE_URL + GARMIN_SUPABASE_SERVICE_ROLE_KEY are set.
-//            Reads your tables server-side with the service_role key, so the
-//            key never reaches the browser.
-//   SAMPLE - neither is set. Serves the generated dataset in data/sample/
-//            (a fictional athlete; see scripts/generate_sample_data.py).
-//            This is what the public demo runs on.
+// Reads your Supabase tables server-side with the secret key; the key never
+// reaches the browser. There is no sample/fallback path — if config is
+// missing, loadBundle() throws NotConfiguredError and the route surfaces it
+// so the UI can show a setup screen.
 //
 // Optional password gate: set GH_PASSWORD (and GH_SESSION_TOKEN) and every
-// data route requires the session cookie that /api/login sets. Leave them
-// unset and the dashboard is open, which is right for the sample data and
-// wrong for your own.
-import { createRequire } from "node:module";
+// data route requires the session cookie that /api/login sets. On Vercel the
+// gate is required (api/data.js refuses to serve without it).
 
-const require = createRequire(import.meta.url);
-
-export const isLive = () =>
-  !!(process.env.GARMIN_SUPABASE_URL && process.env.GARMIN_SUPABASE_SERVICE_ROLE_KEY);
+export class NotConfiguredError extends Error {
+  constructor(missing) {
+    super("not_configured");
+    this.missing = missing;
+  }
+}
 
 export const isGated = () => !!process.env.GH_PASSWORD;
+
+/** Env vars missing to run live. */
+export function missingConfig() {
+  const missing = [];
+  if (!process.env.GARMIN_SUPABASE_URL) missing.push("GARMIN_SUPABASE_URL");
+  if (!process.env.GARMIN_SUPABASE_SECRET_KEY) missing.push("GARMIN_SUPABASE_SECRET_KEY");
+  return missing;
+}
 
 /** true when the request may read data (no gate, or a valid session cookie). */
 export function authorised(req) {
@@ -36,27 +41,15 @@ export function authorised(req) {
   return cookies.gh_auth === token;
 }
 
-export function sampleBundle() {
-  // Literal require paths so Vercel's file tracer bundles the JSON with the function.
-  return {
-    weighIns: require("../data/sample/weigh_ins.json"),
-    activities: require("../data/sample/activities.json"),
-    sleep: require("../data/sample/sleep.json"),
-    daily: require("../data/sample/daily_summary.json"),
-    dexa: require("../data/sample/dexa_scans.json"),
-    bloods: require("../data/sample/blood_panels.json"),
-    source: "sample",
-  };
-}
-
 // Supabase/PostgREST caps a single response at 1000 rows (the `limit` param
 // can't raise it). daily_summary passes 1000 rows within three years, and an
 // unpaginated read silently drops the newest rows, so page with Range headers.
 const PAGE = 1000;
-export async function sbGet(table, order) {
+async function sbGet(table, order) {
   const url = process.env.GARMIN_SUPABASE_URL;
-  const key = process.env.GARMIN_SUPABASE_SERVICE_ROLE_KEY;
-  const headers = { apikey: key, Authorization: `Bearer ${key}` };
+  const key = process.env.GARMIN_SUPABASE_SECRET_KEY;
+  // sb_secret_* keys bypass RLS via `apikey` alone; no Authorization header needed.
+  const headers = { apikey: key };
   const all = [];
   for (let from = 0; ; from += PAGE) {
     const r = await fetch(`${url}/rest/v1/${table}?select=*&order=${order}`, {
@@ -69,7 +62,9 @@ export async function sbGet(table, order) {
   }
 }
 
-export async function liveBundle() {
+export async function loadBundle() {
+  const missing = missingConfig();
+  if (missing.length) throw new NotConfiguredError(missing);
   const [weighIns, activities, sleep, daily, dexa, bloods] = await Promise.all([
     sbGet("garmin_weigh_ins", "measured_date.asc"),
     sbGet("garmin_activities", "activity_date.asc"),
@@ -82,5 +77,3 @@ export async function liveBundle() {
   ]);
   return { weighIns, activities, sleep, daily, dexa, bloods, source: "supabase" };
 }
-
-export const loadBundle = () => (isLive() ? liveBundle() : Promise.resolve(sampleBundle()));
