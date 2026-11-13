@@ -1,5 +1,0 @@
-{
-  "functions": {
-    "api/*.js": { "includeFiles": "data/sample/**" }
-  }
-}

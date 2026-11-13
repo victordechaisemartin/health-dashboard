@@ -6,8 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview",
-    "sample": "python scripts/generate_sample_data.py"
+    "preview": "vite preview"
   },
   "dependencies": {
     "react": "^19.0.0",
