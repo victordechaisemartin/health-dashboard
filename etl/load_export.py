@@ -92,12 +92,17 @@ def parse_activities(root):
             if aid is None:
                 continue
             started = epoch_ms_to_iso(a.get("startTimeGmt") or a.get("beginTimestamp"))
+            # activity_date is the LOCAL calendar date so a late-evening run in
+            # UTC+10 doesn't shift to the next day on the dashboard. startTimeLocal
+            # is already wall-clock epoch ms in Garmin exports; take its date part.
+            local_iso = epoch_ms_to_iso(a.get("startTimeLocal"))
+            activity_date = (local_iso or started or "")[:10] or None
             atype = a.get("activityType")
             if isinstance(atype, dict):
                 atype = atype.get("typeKey")
             out[aid] = {
                 "activity_id": aid,
-                "activity_date": (started or "")[:10] or None,
+                "activity_date": activity_date,
                 "started_at": started,
                 "activity_type": atype,
                 "name": a.get("name"),
