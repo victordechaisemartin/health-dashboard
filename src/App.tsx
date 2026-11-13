@@ -80,8 +80,8 @@ function Page({ route, data, now, go, period, setPeriod, refreshed }: {
   if (route === "/recovery") return <Recovery data={data} now={now} {...p} />;
   if (route === "/body") return <BodyComp data={data} refreshed={refreshed} />;
   if (route === "/bloods") return <Bloods data={data} refreshed={refreshed} />;
-  if (route === "/plan") return <TrainingPlan data={data} now={now} refreshed={refreshed} />;
-  if (route === "/race") return <RacePlan now={now} refreshed={refreshed} />;
+  if (route === "/plan") return <TrainingPlan refreshed={refreshed} />;
+  if (route === "/race") return <RacePlan refreshed={refreshed} />;
 
   const m = route.match(/^\/activity\/(\w+)$/);
   if (m) {
