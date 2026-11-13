@@ -37,7 +37,7 @@ export default function ChatWidget() {
       const j = await r.json().catch(() => null);
       let reply: string;
       if (j && j.setup) {
-        // No ANTHROPIC_API_KEY on the server (this is how the public demo runs).
+        // No ANTHROPIC_API_KEY on the server.
         setNeedsKey(true);
         reply = NEED_KEY;
       } else if (j && typeof j.reply === "string" && j.reply) {
