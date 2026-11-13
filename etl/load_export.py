@@ -38,6 +38,10 @@ def g_to_kg(v):
 def rnd(v, n=1):
     return round(v, n) if isinstance(v, (int, float)) else None
 
+def ni(v):
+    # Garmin sometimes returns integer-schema fields as floats (e.g. 113.0).
+    return int(round(v)) if isinstance(v, (int, float)) else None
+
 def nz(v):
     # 0 from the scale = a failed impedance reading (impossible 0% fat / 0kg muscle) -> null
     return v if isinstance(v, (int, float)) and v != 0 else None
@@ -108,15 +112,15 @@ def parse_activities(root):
                 "name": a.get("name"),
                 "duration_s": int(a["duration"] / 1000) if isinstance(a.get("duration"), (int, float)) else None,
                 "distance_m": rnd(a.get("distance"), 2),
-                "avg_hr": a.get("avgHr"),
-                "max_hr": a.get("maxHr"),
-                "calories": int(a["calories"]) if isinstance(a.get("calories"), (int, float)) else None,
+                "avg_hr": ni(a.get("avgHr")),
+                "max_hr": ni(a.get("maxHr")),
+                "calories": ni(a.get("calories")),
                 "elevation_gain_m": rnd(a.get("elevationGain"), 2),
                 "aerobic_te": rnd(a.get("aerobicTrainingEffect")),
                 "anaerobic_te": rnd(a.get("anaerobicTrainingEffect")),
                 "training_load": rnd(a.get("activityTrainingLoad"), 2),
-                "moderate_min": a.get("moderateIntensityMinutes"),
-                "vigorous_min": a.get("vigorousIntensityMinutes"),
+                "moderate_min": ni(a.get("moderateIntensityMinutes")),
+                "vigorous_min": ni(a.get("vigorousIntensityMinutes")),
             }
     return [v for v in out.values() if v["activity_date"]]
 
@@ -158,16 +162,16 @@ def parse_daily(root):
                 continue
             out[date] = {
                 "summary_date": date,
-                "total_steps": u.get("totalSteps"),
-                "step_goal": u.get("dailyStepGoal"),
+                "total_steps": ni(u.get("totalSteps")),
+                "step_goal": ni(u.get("dailyStepGoal")),
                 "distance_m": rnd(u.get("totalDistanceMeters"), 2),
-                "total_calories": u.get("totalKilocalories"),
-                "active_calories": u.get("activeKilocalories"),
-                "resting_hr": u.get("restingHeartRate"),
-                "min_hr": u.get("minHeartRate"),
-                "max_hr": u.get("maxHeartRate"),
-                "moderate_min": u.get("moderateIntensityMinutes"),
-                "vigorous_min": u.get("vigorousIntensityMinutes"),
+                "total_calories": ni(u.get("totalKilocalories")),
+                "active_calories": ni(u.get("activeKilocalories")),
+                "resting_hr": ni(u.get("restingHeartRate")),
+                "min_hr": ni(u.get("minHeartRate")),
+                "max_hr": ni(u.get("maxHeartRate")),
+                "moderate_min": ni(u.get("moderateIntensityMinutes")),
+                "vigorous_min": ni(u.get("vigorousIntensityMinutes")),
                 "floors_ascended": rnd(u.get("floorsAscendedInMeters"), 2),
             }
     return list(out.values())
