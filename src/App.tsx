@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { lastRefreshed, loadData, login, type Bundle, type LoadResult } from "./lib/data";
 import { datasetNow, ALL_BUCKETS, type Bucket, type PeriodKey } from "./lib/metrics";
-import Nav, { WorkWithUs } from "./components/Nav";
+import Nav from "./components/Nav";
 import ChatWidget from "./components/ChatWidget";
 import Overview from "./pages/Overview";
 import Health from "./pages/Health";
@@ -36,6 +36,7 @@ export default function App() {
 
   if (!state) return <div className="grid h-full place-items-center text-slate-500">Loading…</div>;
   if ("needLogin" in state) return <Login onAuthed={reload} />;
+  if ("needSetup" in state) return <Setup missing={state.missing} />;
   return <Shell data={state} />;
 }
 
@@ -52,19 +53,14 @@ function Shell({ data }: { data: Bundle }) {
 
   return (
     <div className="min-h-full">
-      <Nav route={route} go={go} source={data.source} />
+      <Nav route={route} go={go} />
       <main className="md:pl-56">
         <div className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-8">
           <Page route={route} data={data} now={now} go={go} period={period} setPeriod={setPeriod} refreshed={refreshed} />
           <footer className="mt-12 text-center text-xs text-slate-700">
-            {data.source === "sample" && (
-              <div className="mx-auto mb-5 max-w-xs">
-                <WorkWithUs className="text-left" />
-              </div>
-            )}
-            {data.source === "sample" ? "Sample data (fictional athlete)" : "Garmin Connect"} · {data.activities.length} activities · {data.weighIns.length} weigh-ins · {data.sleep.length} nights
+            Garmin Connect · {data.activities.length} activities · {data.weighIns.length} weigh-ins · {data.sleep.length} nights
             <br />
-            Built by <a className="text-slate-500 hover:text-slate-300" href="https://aaronautomates.com.au" target="_blank" rel="noreferrer">Aaron Automates</a> · <a className="text-slate-500 hover:text-slate-300" href="https://github.com/aaronparton2-sketch/garmin-claude-dashboard" target="_blank" rel="noreferrer">source on GitHub</a>
+            Based on <a className="text-slate-500 hover:text-slate-300" href="https://github.com/aaronparton2-sketch/garmin-claude-dashboard" target="_blank" rel="noreferrer">garmin-claude-dashboard</a> by Aaron Automates (MIT)
           </footer>
         </div>
       </main>
@@ -96,6 +92,28 @@ function Page({ route, data, now, go, period, setPeriod, refreshed }: {
   }
   // unknown route → overview
   return <Overview data={data} now={now} go={go} {...p} />;
+}
+
+function Setup({ missing }: { missing: string[] }) {
+  return (
+    <div className="grid min-h-full place-items-center px-5">
+      <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
+        <div className="mb-4 flex items-center gap-2">
+          <span className="grid h-9 w-9 place-items-center rounded-lg bg-amber-500/15 text-lg">⚙️</span>
+          <h1 className="font-display text-xl font-semibold text-white">Setup required</h1>
+        </div>
+        <p className="mb-4 text-sm text-slate-400">
+          The dashboard needs Supabase credentials before it can load. Set these env vars (in Vercel, or a local <code className="text-slate-300">.env</code>) and reload:
+        </p>
+        <ul className="mb-4 space-y-1.5">
+          {missing.map((k) => (
+            <li key={k} className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 font-mono text-xs text-amber-300">{k}</li>
+          ))}
+        </ul>
+        <p className="text-xs text-slate-500">See <code className="text-slate-400">.env.example</code> in the repo.</p>
+      </div>
+    </div>
+  );
 }
 
 function Login({ onAuthed }: { onAuthed: () => void }) {

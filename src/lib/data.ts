@@ -1,9 +1,7 @@
 // Data layer.
-// Production AND local dev: fetch /api/data (Vercel function in prod, the vite
-//   dev shim locally). It serves your Supabase tables when configured, otherwise
-//   the bundled sample set. Keys stay server-side; nothing sensitive is in the bundle.
-// Fallback: a direct Supabase read using VITE_SUPABASE_* (publishable key under
-//   read-only RLS) for anyone hosting the static build without the API routes.
+// Production AND local dev both fetch /api/data (Vercel function in prod, the
+// vite dev shim locally). Reads your Supabase tables through the server-side
+// key only — no direct browser → Supabase path and no sample fallback.
 
 export type WeighIn = {
   measured_at: string;
@@ -131,65 +129,22 @@ export type Bundle = {
   daily: Daily[];
   dexa: DexaScan[];
   bloods: BloodPanel[];
-  /** sample = the bundled fictional dataset · supabase = your live tables */
-  source: "snapshot" | "sample" | "supabase";
+  source: "supabase";
 };
-export type LoadResult = Bundle | { needLogin: true };
-
-const SB_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const SB_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-
-// Supabase/PostgREST caps a single response at 1000 rows (the `limit` param
-// can't lift it). Tables like garmin_daily_summary already exceed 1000, so an
-// unpaginated read silently drops the newest rows — recent months disappear
-// and metrics like steps read 0. Page through with Range headers until a short
-// page comes back.
-const PAGE = 1000;
-async function fromSupabase(table: string, order: string): Promise<any[]> {
-  const headers = { apikey: SB_KEY!, Authorization: `Bearer ${SB_KEY}` };
-  const all: any[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const res = await fetch(`${SB_URL}/rest/v1/${table}?select=*&order=${order}`, {
-      headers: { ...headers, "Range-Unit": "items", Range: `${from}-${from + PAGE - 1}` },
-    });
-    if (!res.ok) throw new Error(`${table}: ${res.status}`);
-    const batch = await res.json();
-    all.push(...batch);
-    if (batch.length < PAGE) return all;
-  }
-}
+export type LoadResult =
+  | Bundle
+  | { needLogin: true }
+  | { needSetup: true; missing: string[] };
 
 export async function loadData(): Promise<LoadResult> {
-  // 1) Production: the gated proxy.
-  try {
-    const r = await fetch("/api/data", { credentials: "same-origin" });
-    if (r.status === 401) return { needLogin: true };
-    if (r.ok && (r.headers.get("content-type") || "").includes("application/json")) {
-      return (await r.json()) as Bundle;
-    }
-  } catch {
-    /* no serverless function locally — fall through to dev path */
+  const r = await fetch("/api/data", { credentials: "same-origin" });
+  if (r.status === 401) return { needLogin: true };
+  if (r.status === 503) {
+    const body = await r.json().catch(() => ({}));
+    return { needSetup: true, missing: Array.isArray(body.missing) ? body.missing : [] };
   }
-
-  // 2) Local dev: direct Supabase read.
-  if (SB_URL && SB_KEY) {
-    const [weighIns, activities, sleep, daily] = await Promise.all([
-      fromSupabase("garmin_weigh_ins", "measured_date.asc"),
-      fromSupabase("garmin_activities", "activity_date.asc"),
-      fromSupabase("garmin_sleep", "sleep_date.asc"),
-      fromSupabase("garmin_daily_summary", "summary_date.asc"),
-    ]);
-    // Both optional: the table may not exist yet on a fresh project, and a
-    // missing side-table must never take the whole dashboard down.
-    const [dexa, bloods] = await Promise.all([
-      fromSupabase("dexa_scans", "scan_date.asc").catch(() => []),
-      fromSupabase("blood_panels", "panel_date.asc").catch(() => []),
-    ]);
-    return { weighIns, activities, sleep, daily, dexa, bloods, source: "supabase" };
-  }
-
-  // 3) Nothing reachable.
-  return { weighIns: [], activities: [], sleep: [], daily: [], dexa: [], bloods: [], source: "snapshot" };
+  if (!r.ok) throw new Error(`/api/data: ${r.status}`);
+  return (await r.json()) as Bundle;
 }
 
 export async function login(password: string): Promise<boolean> {
