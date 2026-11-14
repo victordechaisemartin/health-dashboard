@@ -1,0 +1,31 @@
+name: Garmin daily sync
+
+on:
+  schedule:
+    - cron: "15 5 * * *"   # 05:15 UTC every day
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "How many days back from today to sync"
+        required: false
+        default: "3"
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sync
+        env:
+          GARMIN_PERSONAL_API_KEY: ${{ secrets.GARMIN_PERSONAL_API_KEY }}
+          GARMIN_SUPABASE_URL: ${{ secrets.GARMIN_SUPABASE_URL }}
+          GARMIN_SUPABASE_SECRET_KEY: ${{ secrets.GARMIN_SUPABASE_SECRET_KEY }}
+        run: python etl/sync_personal_api.py --days ${{ github.event.inputs.days || '3' }}
