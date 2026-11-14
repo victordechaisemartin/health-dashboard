@@ -132,6 +132,25 @@ alter table dexa_scans enable row level security;
 -- secret key. Blood panels live in sql/blood_panels.sql, same rule.
 
 -- ===========================================================================
+-- HRV (Garmin Personal API — /hrv-service/hrv/daily/{from}/{to}).
+-- One row per calendar date. Baseline is the band Garmin derived from the
+-- user's own history; status is the categorical label (BALANCED, UNBALANCED,
+-- LOW, POOR, NO_STATUS).
+-- ===========================================================================
+create table if not exists garmin_hrv (
+    hrv_date             date primary key,
+    last_night_avg       integer,
+    last_night_5min_high integer,
+    weekly_avg           integer,
+    baseline_low         integer,
+    baseline_high        integer,
+    status               text,
+    created_at           timestamptz default now()
+);
+create index if not exists idx_garmin_hrv_date on garmin_hrv (hrv_date desc);
+alter table garmin_hrv enable row level security;
+
+-- ===========================================================================
 -- Revoke all grants from anon + authenticated. RLS plus these revokes mean
 -- only the secret key (which bypasses both) can read anything.
 -- ===========================================================================
@@ -139,4 +158,5 @@ revoke all on garmin_weigh_ins     from anon, authenticated;
 revoke all on garmin_activities    from anon, authenticated;
 revoke all on garmin_sleep         from anon, authenticated;
 revoke all on garmin_daily_summary from anon, authenticated;
+revoke all on garmin_hrv           from anon, authenticated;
 revoke all on dexa_scans           from anon, authenticated;
