@@ -95,15 +95,29 @@ def parse_activities(root):
             aid = a.get("activityId")
             if aid is None:
                 continue
+            atype = a.get("activityType")
+            if isinstance(atype, dict):
+                atype = atype.get("typeKey")
+            # Multisport parent rows aggregate their own legs (which are
+            # separate entries), and transition_v2 rows are T1/T2 segments.
+            # Including either double-counts the day.
+            if a.get("parent") is True or atype in ("multi_sport", "transition_v2"):
+                continue
             started = epoch_ms_to_iso(a.get("startTimeGmt") or a.get("beginTimestamp"))
             # activity_date is the LOCAL calendar date so a late-evening run in
             # UTC+10 doesn't shift to the next day on the dashboard. startTimeLocal
             # is already wall-clock epoch ms in Garmin exports; take its date part.
             local_iso = epoch_ms_to_iso(a.get("startTimeLocal"))
             activity_date = (local_iso or started or "")[:10] or None
-            atype = a.get("activityType")
-            if isinstance(atype, dict):
-                atype = atype.get("typeKey")
+            # Garmin units in summarizedActivities:
+            #   distance       : centimetres -> metres
+            #   elevationGain  : centimetres -> metres
+            #   calories       : kilojoules  -> kilocalories (kJ / 4.184)
+            #   duration       : milliseconds -> seconds (already /1000 below)
+            dist_m = a.get("distance") / 100.0 if isinstance(a.get("distance"), (int, float)) else None
+            elev_m = a.get("elevationGain") / 100.0 if isinstance(a.get("elevationGain"), (int, float)) else None
+            cal_kj = a.get("calories")
+            cal_kcal = int(round(cal_kj / 4.184)) if isinstance(cal_kj, (int, float)) else None
             out[aid] = {
                 "activity_id": aid,
                 "activity_date": activity_date,
@@ -111,11 +125,11 @@ def parse_activities(root):
                 "activity_type": atype,
                 "name": a.get("name"),
                 "duration_s": int(a["duration"] / 1000) if isinstance(a.get("duration"), (int, float)) else None,
-                "distance_m": rnd(a.get("distance"), 2),
+                "distance_m": rnd(dist_m, 2),
                 "avg_hr": ni(a.get("avgHr")),
                 "max_hr": ni(a.get("maxHr")),
-                "calories": ni(a.get("calories")),
-                "elevation_gain_m": rnd(a.get("elevationGain"), 2),
+                "calories": cal_kcal,
+                "elevation_gain_m": rnd(elev_m, 2),
                 "aerobic_te": rnd(a.get("aerobicTrainingEffect")),
                 "anaerobic_te": rnd(a.get("anaerobicTrainingEffect")),
                 "training_load": rnd(a.get("activityTrainingLoad"), 2),
