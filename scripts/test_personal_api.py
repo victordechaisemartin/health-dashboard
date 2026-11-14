@@ -186,6 +186,12 @@ def main():
     call("user_profile",     token, "/userprofile-service/userprofile/settings")
     call("activities",       token, "/activitylist-service/activities/search/activities",
          params={"start": 0, "limit": 50, "sortBy": "startLocal", "sortOrder": "desc"})
+    # Multisport probe: do the legs come through when we ask Garmin NOT to exclude children?
+    call("activities_with_children", token, "/activitylist-service/activities/search/activities",
+         params={"start": 0, "limit": 50, "sortBy": "startLocal", "sortOrder": "desc",
+                 "excludeChildren": "false"})
+    # Multisport parent detail — see if the parent response names its legs.
+    call("activity_detail_tri", token, "/activity-service/activity/24600784203")
     call("daily_summaries",  token, "/usersummary-service/v2/dailysummaries",
          params={"startDate": y7, "endDate": y0})
     call("usersummary_today", token, "/usersummary-service/usersummary/daily",

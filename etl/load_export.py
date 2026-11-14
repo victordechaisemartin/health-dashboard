@@ -186,7 +186,11 @@ def parse_daily(root):
                 "max_hr": ni(u.get("maxHeartRate")),
                 "moderate_min": ni(u.get("moderateIntensityMinutes")),
                 "vigorous_min": ni(u.get("vigorousIntensityMinutes")),
-                "floors_ascended": rnd(u.get("floorsAscendedInMeters"), 2),
+                # UDS exports only expose floorsAscendedInMeters. Convert to a
+                # floor count (Garmin's convention: 3.048 m == 1 floor) so the
+                # column means the same thing as the Personal API's floorsAscended.
+                "floors_ascended": rnd(u["floorsAscendedInMeters"] / 3.048, 2)
+                    if isinstance(u.get("floorsAscendedInMeters"), (int, float)) else None,
             }
     return list(out.values())
 

@@ -215,7 +215,10 @@ def parse_hrv(h):
         "last_night_avg": _ni(h.get("lastNightAvg")),
         "last_night_5min_high": _ni(h.get("lastNight5MinHigh")),
         "weekly_avg": _ni(h.get("weeklyAvg")),
-        "baseline_low": _ni(bl.get("lowUpper")),
+        # baseline.lowUpper is the UPPER bound of the "low" band (i.e. a
+        # threshold inside the baseline, not the lower edge of the balanced
+        # band). The balanced band itself is [balancedLow, balancedUpper].
+        "baseline_low": _ni(bl.get("balancedLow")),
         "baseline_high": _ni(bl.get("balancedUpper")),
         "status": h.get("status"),
     }
@@ -281,9 +284,13 @@ def main():
     print("Fetching activities...")
     acts_raw = []
     want = max(50, args.days * 5)   # heuristic: ~5 activities/day safety margin
+    # excludeChildren=false brings in multisport legs (swim/bike/run) as their
+    # own rows. We still skip the parent (parent==True) and transition_v2 legs
+    # in parse_activity so a tri day counts once per sport, matching the loader.
     status, batch = api_get(token, "/activitylist-service/activities/search/activities",
                             params={"start": 0, "limit": min(99, want),
-                                    "sortBy": "startLocal", "sortOrder": "desc"})
+                                    "sortBy": "startLocal", "sortOrder": "desc",
+                                    "excludeChildren": "false"})
     if status >= 300 or not isinstance(batch, list):
         fail(f"activity list HTTP {status}")
     acts_raw = batch
