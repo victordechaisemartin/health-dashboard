@@ -163,6 +163,7 @@ def main():
     ap = argparse.ArgumentParser(description="Garmin Personal API scout")
     ap.add_argument("--start", type=iso_date, help="window start date (YYYY-MM-DD); defaults to 7 days before --end")
     ap.add_argument("--end", type=iso_date, help="window end date (YYYY-MM-DD); defaults to today")
+    ap.add_argument("--activity-id", type=int, help="optional activity ID to probe via /activity-service/activity/{id}")
     args = ap.parse_args()
 
     load_dotenv()
@@ -190,8 +191,8 @@ def main():
     call("activities_with_children", token, "/activitylist-service/activities/search/activities",
          params={"start": 0, "limit": 50, "sortBy": "startLocal", "sortOrder": "desc",
                  "excludeChildren": "false"})
-    # Multisport parent detail — see if the parent response names its legs.
-    call("activity_detail_tri", token, "/activity-service/activity/24600784203")
+    if args.activity_id:
+        call("activity_detail", token, f"/activity-service/activity/{args.activity_id}")
     call("daily_summaries",  token, "/usersummary-service/v2/dailysummaries",
          params={"startDate": y7, "endDate": y0})
     call("usersummary_today", token, "/usersummary-service/usersummary/daily",
