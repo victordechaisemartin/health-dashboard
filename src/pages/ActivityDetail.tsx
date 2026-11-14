@@ -5,7 +5,7 @@ import {
 import type { Activity, Bundle } from "../lib/data";
 import {
   BUCKET_META, activitiesIn, fmtDuration, fmtKm, fmtPace, fmtSpeed, monthlySeries,
-  periods, windowStat, pct, type Bucket, type PeriodKey,
+  parseLocalDate, periods, windowStat, pct, type Bucket, type PeriodKey,
 } from "../lib/metrics";
 import { AXIS_TICK, ChartCard, EmptyHint, GRID, PageHeader, PeriodMenu, Stat, TOOLTIP } from "../ui";
 
@@ -23,7 +23,7 @@ export default function ActivityDetail({ bucket, data, now, period, setPeriod, r
 
   const months = useMemo(() => monthlySeries(acts, 12, now), [acts, now]);
   const recent = useMemo(() => [...acts].slice(-60).map((a) => ({
-    date: new Date(a.activity_date).toLocaleDateString("en-AU", { day: "numeric", month: "short" }),
+    date: parseLocalDate(a.activity_date).toLocaleDateString("en-AU", { day: "numeric", month: "short" }),
     km: +((a.distance_m || 0) / 1000).toFixed(2),
     hr: a.avg_hr || null,
     load: a.training_load || 0,
@@ -150,7 +150,7 @@ function RecentTable({ bucket, acts }: { bucket: Bucket; acts: Activity[] }) {
           <tbody>
             {acts.map((a) => (
               <tr key={a.activity_id} className="border-b border-slate-800/50 text-slate-300">
-                <td className="py-2 pr-3 text-slate-400">{new Date(a.activity_date).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "2-digit" })}</td>
+                <td className="py-2 pr-3 text-slate-400">{parseLocalDate(a.activity_date).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "2-digit" })}</td>
                 <td className="py-2 pr-3 text-white">{a.name || m.label}</td>
                 {m.distance && <td className="py-2 pr-3 text-right">{fmtKm((a.distance_m || 0) / 1000)}</td>}
                 <td className="py-2 pr-3 text-right">{fmtDuration(a.duration_s || 0)}</td>

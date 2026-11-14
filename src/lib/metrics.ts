@@ -47,6 +47,22 @@ export function bucketOf(type: string | null | undefined): Bucket | null {
   return TYPE_MAP[type.toLowerCase()] ?? null;
 }
 
+// Parse a "YYYY-MM-DD" column as LOCAL midnight. `new Date("2026-10-31")`
+// is UTC midnight per spec, which in Europe/Paris lands on 31 Oct at
+// 01:00–02:00 local — same day there but the opposite side of midnight
+// in westward zones. Use this everywhere a date column becomes a Date.
+export function parseLocalDate(s: string): Date {
+  const [y, m, d] = s.slice(0, 10).split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+// "YYYY-MM" key built from LOCAL fields. toISOString() converts to UTC,
+// which shifts local-midnight of the 1st to the previous month in zones
+// east of UTC — making October activities appear under the November slot.
+export function monthKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 export function activitiesIn(activities: Activity[], bucket: Bucket): Activity[] {
   return activities.filter((a) => bucketOf(a.activity_type) === bucket);
 }
@@ -61,7 +77,7 @@ export function datasetNow(activities: Activity[], sleep: Sleep[], daily: Daily[
     ...daily.map((d) => d.summary_date),
   ].filter(Boolean) as string[];
   if (!dates.length) return new Date();
-  const latest = new Date(dates.reduce((m, d) => (d > m ? d : m)));
+  const latest = parseLocalDate(dates.reduce((m, d) => (d > m ? d : m)));
   const today = new Date();
   return latest > today ? today : latest;
 }
@@ -98,7 +114,7 @@ export function periods(now: Date, key: PeriodKey): { current: Window; prev: Win
 }
 
 function inWindow(date: string, w: Window): boolean {
-  const t = new Date(date).getTime();
+  const t = parseLocalDate(date).getTime();
   return t >= w.start.getTime() && t <= w.end.getTime();
 }
 
@@ -238,7 +254,7 @@ export function monthlySeries(acts: Activity[], months = 12, now = new Date()): 
   const out: MonthPoint[] = [];
   for (let i = months - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = d.toISOString().slice(0, 7);
+    const key = monthKey(d);
     const rows = acts.filter((a) => a.activity_date.slice(0, 7) === key);
     const s = aggregate(rows);
     out.push({

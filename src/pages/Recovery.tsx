@@ -5,14 +5,14 @@ import {
 } from "recharts";
 import type { Bundle } from "../lib/data";
 import { fmtDate } from "../lib/data";
-import { periods, sleepStat, sleepScoreOf, pct, type PeriodKey, type Window } from "../lib/metrics";
+import { parseLocalDate, periods, sleepStat, sleepScoreOf, pct, type PeriodKey, type Window } from "../lib/metrics";
 import { AXIS_TICK, ChartCard, EmptyHint, GRID, PageHeader, PeriodMenu, Stat, TOOLTIP } from "../ui";
 
 const ACCENT = "#38bdf8";
 const C = { rhr: "#f87171", score: "#fbbf24", stress: "#fb923c", resp: "#6ee7b7", load: "#a78bfa" };
 
 const inWin = (date: string, w: Window) => {
-  const t = new Date(date).getTime();
+  const t = parseLocalDate(date).getTime();
   return t >= w.start.getTime() && t <= w.end.getTime();
 };
 const mean = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);

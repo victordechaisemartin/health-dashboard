@@ -4,7 +4,7 @@ import {
 } from "recharts";
 import type { Bundle } from "../lib/data";
 import { fmtDate, last, recent, rolling } from "../lib/data";
-import { periods, type PeriodKey } from "../lib/metrics";
+import { parseLocalDate, periods, type PeriodKey } from "../lib/metrics";
 import { AXIS_TICK, ChartCard, GRID, PageHeader, PeriodMenu, Stat, TOOLTIP } from "../ui";
 
 const C = { weight: "#6ee7b7", fat: "#fbbf24", muscle: "#818cf8", sleep: "#a78bfa", hr: "#f87171", steps: "#38bdf8" };
@@ -13,8 +13,8 @@ export default function Health({ data, now, period, setPeriod, refreshed }: {
   data: Bundle; now: Date; period: PeriodKey; setPeriod: (p: PeriodKey) => void; refreshed?: string;
 }) {
   const { current, prev } = periods(now, period);
-  const inCur = (d: string) => { const t = new Date(d).getTime(); return t >= current.start.getTime() && t <= current.end.getTime(); };
-  const inPrev = (d: string) => { const t = new Date(d).getTime(); return t >= prev.start.getTime() && t <= prev.end.getTime(); };
+  const inCur = (d: string) => { const t = parseLocalDate(d).getTime(); return t >= current.start.getTime() && t <= current.end.getTime(); };
+  const inPrev = (d: string) => { const t = parseLocalDate(d).getTime(); return t >= prev.start.getTime() && t <= prev.end.getTime(); };
 
   const wiAll = useMemo(
     () => [...data.weighIns].sort((a, b) => a.measured_date.localeCompare(b.measured_date)),

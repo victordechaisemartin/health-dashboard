@@ -3,6 +3,8 @@
 // vite dev shim locally). Reads your Supabase tables through the server-side
 // key only — no direct browser → Supabase path and no sample fallback.
 
+import { parseLocalDate } from "./metrics";
+
 export type WeighIn = {
   measured_at: string;
   measured_date: string;
@@ -186,13 +188,12 @@ export function rolling(vals: (number | null)[], window: number): (number | null
 }
 
 export function fmtDate(d: string): string {
-  const dt = new Date(d);
-  return dt.toLocaleDateString("en-AU", { day: "numeric", month: "short" });
+  return parseLocalDate(d).toLocaleDateString("en-AU", { day: "numeric", month: "short" });
 }
 
 export function recent<T extends { [k: string]: any }>(rows: T[], key: string, days: number): T[] {
   if (!rows.length) return rows;
-  const cutoff = new Date(rows[rows.length - 1][key]);
+  const cutoff = parseLocalDate(rows[rows.length - 1][key]);
   cutoff.setDate(cutoff.getDate() - days);
-  return rows.filter((r) => new Date(r[key]) >= cutoff);
+  return rows.filter((r) => parseLocalDate(r[key]) >= cutoff);
 }

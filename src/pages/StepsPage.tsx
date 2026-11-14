@@ -5,7 +5,7 @@ import {
 } from "recharts";
 import type { Bundle } from "../lib/data";
 import { fmtDate } from "../lib/data";
-import { fmtKm, fmtSteps, periods, stepStat, pct, type PeriodKey } from "../lib/metrics";
+import { fmtKm, fmtSteps, monthKey, periods, stepStat, pct, type PeriodKey } from "../lib/metrics";
 import { AXIS_TICK, ChartCard, EmptyHint, GRID, PageHeader, PeriodMenu, Stat, TOOLTIP } from "../ui";
 
 const COLOR = "#a3e635";
@@ -37,7 +37,7 @@ export default function StepsPage({ data, now, period, setPeriod, refreshed }: {
     const out: { label: string; avg: number }[] = [];
     for (let i = 11; i >= 0; i--) {
       const dt = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = dt.toISOString().slice(0, 7);
+      const key = monthKey(dt);
       const rows = daily.filter((d) => d.summary_date.slice(0, 7) === key && d.total_steps != null);
       const avg = rows.length ? Math.round(rows.reduce((a, d) => a + (d.total_steps || 0), 0) / rows.length) : 0;
       out.push({ label: dt.toLocaleDateString("en-AU", { month: "short" }), avg });

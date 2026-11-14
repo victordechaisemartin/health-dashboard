@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { Bundle, DexaScan, WeighIn } from "../lib/data";
+import { parseLocalDate } from "../lib/metrics";
 
 /**
  * Body Composition — DEXA (reference standard) vs the Garmin Index scale.
@@ -22,7 +23,7 @@ const fmt = (n: number | null | undefined, d = 1, suffix = "") =>
   n == null || Number.isNaN(n) ? "—" : `${n.toFixed(d)}${suffix}`;
 
 const daysBetween = (a: string, b: string) =>
-  Math.abs(Math.round((new Date(a).getTime() - new Date(b).getTime()) / 86400000));
+  Math.abs(Math.round((parseLocalDate(a).getTime() - parseLocalDate(b).getTime()) / 86400000));
 
 function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
