@@ -18,6 +18,7 @@ Copy `.env.example` to `.env` and fill in:
 |---|---|
 | `GARMIN_SUPABASE_URL` | `https://<ref>.supabase.co` |
 | `GARMIN_SUPABASE_SECRET_KEY` | A `sb_secret_...` key. Server-side only. |
+| `GARMIN_PERSONAL_API_KEY` | Garmin Personal API key (see "Daily sync" below) |
 | `GH_PASSWORD` | Dashboard access code. **Required on Vercel.** |
 | `GH_SESSION_TOKEN` | Any long random string (session cookie value) |
 | `ANTHROPIC_API_KEY` | Optional — enables the AI chat widget |
@@ -38,6 +39,29 @@ Nothing is readable through the anon/publishable key. Only the secret key
 (which bypasses RLS) can read, and that lives only in server env vars.
 
 ## Load data
+
+Two loaders, for two scenarios.
+
+### Daily sync (Garmin Personal API)
+
+Request a Personal API key at https://connect.garmin.com/app/settings/personalApiToken
+and put it in `.env` as `GARMIN_PERSONAL_API_KEY`. Then:
+
+```bash
+python etl/sync_personal_api.py --dry-run --days 7   # fetch + map, no writes
+python etl/sync_personal_api.py --days 14            # backfill last 14 days
+python etl/sync_personal_api.py                      # default: last 3 days
+```
+
+The sync upserts to `garmin_activities`, `garmin_daily_summary`,
+`garmin_sleep`, and `garmin_hrv`. Running it twice is harmless.
+
+A GitHub Action in `.github/workflows/garmin-sync.yml` runs it daily at
+05:15 UTC. It uses three repo secrets: `GARMIN_PERSONAL_API_KEY`,
+`GARMIN_SUPABASE_URL`, `GARMIN_SUPABASE_SECRET_KEY`. Trigger it manually
+from the Actions tab (or `gh workflow run garmin-sync.yml -f days=14`).
+
+### Bulk import (Garmin GDPR export, one-off)
 
 From a Garmin GDPR export (`Account → Export Your Data`):
 

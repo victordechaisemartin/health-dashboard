@@ -3,6 +3,7 @@ dist/
 *.tsbuildinfo
 .agents/
 skills-lock.json
+__pycache__/
 .env
 .env.*
 !.env.example

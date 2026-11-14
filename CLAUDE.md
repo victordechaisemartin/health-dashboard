@@ -59,9 +59,12 @@ Race Plan and Training Plan pages render a single "No plan yet" card — no plan
 |---|---|
 | `GARMIN_SUPABASE_URL` | Supabase project URL |
 | `GARMIN_SUPABASE_SECRET_KEY` | `sb_secret_...` key; server-side only |
+| `GARMIN_PERSONAL_API_KEY` | Garmin Personal API key (daily sync) |
 | `GH_PASSWORD` | Dashboard password gate; **required on Vercel** |
 | `GH_SESSION_TOKEN` | Cookie value for the gate |
 | `ANTHROPIC_API_KEY` | Enables AI coach |
 | `ANTHROPIC_MODEL` | Defaults to `claude-haiku-4-5-20251001` |
+
+Two ETL entry points: `etl/load_export.py` (one-off GDPR import, cm/kJ units) and `etl/sync_personal_api.py` (daily Personal API sync, already m/s/kcal). The latter is called from `.github/workflows/garmin-sync.yml` on cron.
 
 Anything prefixed `VITE_` is inlined into the public bundle — never put keys there.
