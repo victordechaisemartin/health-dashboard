@@ -11,6 +11,7 @@ import StepsPage from "./pages/StepsPage";
 import TrainingPlan from "./pages/TrainingPlan";
 import RacePlan from "./pages/RacePlan";
 import Recovery from "./pages/Recovery";
+import Load from "./pages/Load";
 import BodyComp from "./pages/BodyComp";
 import Bloods from "./pages/Bloods";
 
@@ -78,6 +79,7 @@ function Page({ route, data, now, go, period, setPeriod, refreshed }: {
   if (route === "/health") return <Health data={data} now={now} {...p} />;
   if (route === "/sleep") return <SleepPage data={data} now={now} {...p} />;
   if (route === "/recovery") return <Recovery data={data} now={now} {...p} />;
+  if (route === "/load") return <Load data={data} refreshed={refreshed} />;
   if (route === "/body") return <BodyComp data={data} refreshed={refreshed} />;
   if (route === "/bloods") return <Bloods data={data} refreshed={refreshed} />;
   if (route === "/plan") return <TrainingPlan refreshed={refreshed} />;

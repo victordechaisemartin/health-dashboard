@@ -2,11 +2,19 @@
 // Constitution VI: `reason` MUST be set whenever `value === null` or `status === "na"`.
 // Constitution VIII: all thresholds come from targets.ts, never inline.
 
-import type { Daily, Hrv, Sleep } from "./data";
-import { parseLocalDate } from "./metrics";
+import type { Activity, Daily, Hrv, Sleep } from "./data";
+import { parseLocalDate, bucketOf } from "./metrics";
+import type { WeekSummary } from "./weeks";
 import {
   RHR_WATCH_BPM, RHR_ACT_BPM, RHR_BASELINE_MIN_DAYS,
   SLEEP_TARGET_S, SLEEP_WATCH_S, SLEEP_ACT_S,
+  ACWR_OK_MIN, ACWR_OK_MAX, ACWR_WATCH_MAX,
+  WEEKLY_VOLUME_LIMIT_PCT, WEEKLY_VOLUME_LIMIT_LOW_BASE_PCT,
+  HARD_DAY_STREAK_WATCH, HARD_DAY_STREAK_ACT,
+  QUALITY_SESSIONS_TARGET,
+  LONG_RUN_SHARE_WATCH, LONG_RUN_SHARE_ACT, LONG_RUN_MIN_RUNS,
+  QUALITY_AEROBIC_TE, QUALITY_ANAEROBIC_TE, QUALITY_DURATION_MAX_S,
+  LONG_DURATION_S,
 } from "./targets";
 
 export type KpiStatus = "ok" | "watch" | "act" | "na";
@@ -206,4 +214,206 @@ export function todayVerdict(rhr: KpiResult, hrv: KpiResult, sleep: KpiResult): 
   }
 
   return { value: "Go", status: "ok", rule: "All signals in range" };
+}
+
+// ---- §4.5 Acute:chronic load ratio -----------------------------------------
+
+export function acuteChronicRatio(activities: Activity[], daily: Daily[], today: Date): KpiResult {
+  const todayStr = localStr(today);
+  const cutoff28 = addDays(today, -27);
+
+  // Coverage: need ≥ 21 of last 28 days in daily summaries
+  const covered = daily.filter((d) => d.summary_date >= cutoff28 && d.summary_date <= todayStr).length;
+  if (covered < 21) {
+    return {
+      value: null, status: "na",
+      rule: `Only ${covered}/28 days synced — need ≥ 21`,
+      reason: `${covered}/28 days covered`,
+    };
+  }
+
+  const acuteCutoff = addDays(today, -6);
+  const acute = activities
+    .filter((a) => a.activity_date >= acuteCutoff && a.activity_date <= todayStr)
+    .reduce((s, a) => s + (a.training_load ?? 0), 0);
+  const chronic = activities
+    .filter((a) => a.activity_date >= cutoff28 && a.activity_date <= todayStr)
+    .reduce((s, a) => s + (a.training_load ?? 0), 0) / 4;
+
+  if (chronic === 0) {
+    return { value: null, status: "na", rule: "Chronic load is zero (no training in last 28 days)", reason: "no load data" };
+  }
+
+  const ratio = +(acute / chronic).toFixed(1);
+  const note = " Approximation — Garmin's own ratio in Phase 3.";
+
+  if (ratio > ACWR_WATCH_MAX) {
+    return { value: ratio, status: "act", rule: `ACWR ${ratio} — reduce now (> ${ACWR_WATCH_MAX}).${note}` };
+  }
+  if (ratio > ACWR_OK_MAX) {
+    return { value: ratio, status: "watch", rule: `ACWR ${ratio} — elevated injury risk (${ACWR_OK_MAX}–${ACWR_WATCH_MAX}).${note}` };
+  }
+  // < 0.8 is detraining (grey) — show value as ok; rule notes the zone
+  if (ratio < ACWR_OK_MIN) {
+    return { value: ratio, status: "ok", rule: `ACWR ${ratio} — detraining zone (< ${ACWR_OK_MIN}).${note}` };
+  }
+  return { value: ratio, status: "ok", rule: `ACWR ${ratio} — optimal zone (${ACWR_OK_MIN}–${ACWR_OK_MAX}).${note}` };
+}
+
+// ---- §4.6 Weekly volume progression ----------------------------------------
+
+export function weeklyVolumeProgression(
+  weeks: WeekSummary[],
+  today: Date,
+): { hours: KpiResult; runKm: KpiResult } {
+  const completed = weeks.filter((w) => !w.inProgress);
+  if (completed.length === 0) {
+    const r: KpiResult = { value: null, status: "na", rule: "No completed weeks", reason: "not enough history" };
+    return { hours: r, runKm: r };
+  }
+
+  const lastIdx = completed.length - 1;
+  const last = completed[lastIdx];
+  const prior4 = completed.slice(Math.max(0, lastIdx - 4), lastIdx);
+
+  if (prior4.length === 0) {
+    const r: KpiResult = { value: null, status: "na", rule: "No prior weeks for baseline", reason: "need ≥ 1 prior week" };
+    return { hours: r, runKm: r };
+  }
+
+  const baseHours = Math.max(...prior4.map((w) => w.totalHours));
+  const baseKm = Math.max(...prior4.map((w) => w.byBucket.running.km));
+
+  // Volume + intensity check: quality sessions rose and hours exceeded limit
+  const prevCompleted = prior4[prior4.length - 1];
+  const qualityRose =
+    prevCompleted != null &&
+    Object.values(last.byBucket).reduce((s, b) => s + b.qualitySessions, 0) >
+      Object.values(prevCompleted.byBucket).reduce((s, b) => s + b.qualitySessions, 0);
+
+  function volumeKpi(value: number, baseline: number, unit: "h" | "km"): KpiResult {
+    if (baseline === 0) {
+      return { value: +value.toFixed(1), unit, status: "ok", rule: `${value.toFixed(1)} ${unit} (no baseline)` };
+    }
+    const pct = (value - baseline) / baseline;
+    const limit = baseline < 4 ? WEEKLY_VOLUME_LIMIT_LOW_BASE_PCT / 100 : WEEKLY_VOLUME_LIMIT_PCT / 100;
+    const pctStr = `${pct >= 0 ? "+" : ""}${(pct * 100).toFixed(0)}%`;
+    const baseStr = `${baseline.toFixed(1)} ${unit} baseline`;
+    const intensityNote = qualityRose && pct > limit ? " · volume and intensity up together" : "";
+
+    if (pct > 2 * limit) {
+      return { value: +value.toFixed(1), unit, status: "act", rule: `${pctStr} vs ${baseStr}${intensityNote}` };
+    }
+    if (pct > limit) {
+      return { value: +value.toFixed(1), unit, status: "watch", rule: `${pctStr} vs ${baseStr}${intensityNote}` };
+    }
+    return { value: +value.toFixed(1), unit, status: "ok", rule: `${pctStr} vs ${baseStr}` };
+  }
+
+  return {
+    hours: volumeKpi(last.totalHours, baseHours, "h"),
+    runKm: volumeKpi(last.byBucket.running.km, baseKm, "km"),
+  };
+}
+
+// ---- §4.7 Hard-day streak ---------------------------------------------------
+
+function isHardActivity(a: Activity): boolean {
+  const bucket = bucketOf(a.activity_type);
+  if (!bucket || bucket === "sleep") return false;
+  const isHike = a.activity_type === "hiking";
+  const anaerobic = a.anaerobic_te ?? 0;
+  const aerobic = a.aerobic_te ?? 0;
+  const dur = a.duration_s ?? 0;
+  const quality = isHike
+    ? anaerobic >= QUALITY_ANAEROBIC_TE
+    : anaerobic >= QUALITY_ANAEROBIC_TE || (aerobic >= QUALITY_AEROBIC_TE && dur < QUALITY_DURATION_MAX_S);
+  const long = !isHike && ["running", "swimming", "cycling"].includes(bucket) && dur >= LONG_DURATION_S;
+  return quality || long;
+}
+
+export function hardDayStreak(activities: Activity[], today: Date): KpiResult {
+  const todayStr = localStr(today);
+  const cutoff = addDays(today, -20);
+
+  const hardDates = new Set<string>();
+  for (const a of activities) {
+    if (a.activity_date < cutoff || a.activity_date > todayStr) continue;
+    if (isHardActivity(a)) hardDates.add(a.activity_date);
+  }
+
+  const countBack = (startStr: string): number => {
+    let n = 0;
+    let d = parseLocalDate(startStr);
+    while (hardDates.has(localStr(d))) {
+      n++;
+      d = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);
+    }
+    return n;
+  };
+
+  const todayStreak = countBack(todayStr);
+  // If today is a rest day, check if yesterday ended a streak
+  const yesterdayStr = addDays(today, -1);
+  const streak = todayStreak > 0 ? todayStreak : countBack(yesterdayStr);
+
+  if (streak === 0) return { value: 0, status: "ok", rule: "No hard days in a row" };
+  if (streak >= HARD_DAY_STREAK_ACT) {
+    return { value: streak, status: "act", rule: `${streak} hard days in a row — take an easy/rest day` };
+  }
+  if (streak >= HARD_DAY_STREAK_WATCH) {
+    return { value: streak, status: "watch", rule: `${streak} hard days in a row — monitor recovery` };
+  }
+  return { value: streak, status: "ok", rule: `${streak} hard day in a row` };
+}
+
+export function qualitySessionsThisWeek(weeks: WeekSummary[], today: Date): KpiResult {
+  const current = weeks.find((w) => w.inProgress);
+  if (!current) {
+    return { value: null, status: "na", rule: "No current week data", reason: "no activities this week" };
+  }
+  const total = Object.values(current.byBucket).reduce((s, b) => s + b.qualitySessions, 0);
+  const target = QUALITY_SESSIONS_TARGET;
+
+  if (total >= target + 2) {
+    return { value: total, status: "act", rule: `${total} quality sessions this week — reduce intensity (target ≤ ${target})` };
+  }
+  if (total >= target + 1) {
+    return { value: total, status: "watch", rule: `${total} quality sessions this week (target ≤ ${target})` };
+  }
+  return { value: total, status: "ok", rule: `${total}/${target} quality sessions this week` };
+}
+
+// ---- §4.8 Long-run share ---------------------------------------------------
+
+export function longRunShare(weeks: WeekSummary[], today: Date): KpiResult {
+  const completed = weeks.filter((w) => !w.inProgress);
+  if (!completed.length) {
+    return { value: null, status: "na", rule: "No completed weeks", reason: "not enough history" };
+  }
+  const last = completed[completed.length - 1];
+  const run = last.byBucket.running;
+
+  if (run.sessions < LONG_RUN_MIN_RUNS) {
+    return {
+      value: null, status: "na",
+      rule: `${run.sessions} run(s) last week — need ≥ ${LONG_RUN_MIN_RUNS} for this KPI`,
+      reason: `only ${run.sessions} run(s)`,
+    };
+  }
+  if (run.km === 0) {
+    return { value: null, status: "na", rule: "No run km last week", reason: "no km data" };
+  }
+
+  const share = run.longestKm / run.km;
+  const pct = Math.round(share * 100);
+  const note = " Coaching exception for ultra/trail blocks.";
+
+  if (share > LONG_RUN_SHARE_ACT) {
+    return { value: `${pct}%`, status: "act", rule: `Longest run is ${pct}% of weekly km — consider reducing.${note}` };
+  }
+  if (share > LONG_RUN_SHARE_WATCH) {
+    return { value: `${pct}%`, status: "watch", rule: `Longest run is ${pct}% of weekly km.${note}` };
+  }
+  return { value: `${pct}%`, status: "ok", rule: `Longest run is ${pct}% of weekly km` };
 }

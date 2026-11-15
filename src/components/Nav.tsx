@@ -20,7 +20,10 @@ export const NAV_SECTIONS: { heading?: string; items: NavItem[] }[] = [
       { path: "/sleep", label: "Sleep", icon: BUCKET_META.sleep.icon, color: BUCKET_META.sleep.color },
     ],
   },
-  { heading: "Recovery", items: [{ path: "/recovery", label: "Recovery", icon: "🌙", color: "#38bdf8" }] },
+  { heading: "Recovery", items: [
+    { path: "/recovery", label: "Recovery", icon: "🌙", color: "#38bdf8" },
+    { path: "/load", label: "Load", icon: "⚡", color: "#fbbf24" },
+  ] },
   { heading: "Plan", items: [
     { path: "/race", label: "Race Plan", icon: "🏁", color: "#fbbf24" },
     { path: "/plan", label: "Training Plan", icon: "🎯", color: "#34d399" },

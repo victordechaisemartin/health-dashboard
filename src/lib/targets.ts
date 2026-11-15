@@ -38,8 +38,8 @@ export const WEEKLY_COUNTING_SESSIONS = 3; // spec §4.10: Q2 default for streak
 export const QUALITY_SESSIONS_TARGET = 3;  // spec §4.7: ≤ 3 quality sessions/week
 
 // ---- Long run share (spec §4.8) ---------------------------------------------
-export const LONG_RUN_SHARE_WATCH = 0.35; // default: > 35% → watch
-export const LONG_RUN_SHARE_ACT = 0.5;    // default: > 50% → act
+export const LONG_RUN_SHARE_WATCH = 0.30; // spec §4.8: > 30% → watch
+export const LONG_RUN_SHARE_ACT = 0.40;   // spec §4.8: > 40% → act
 export const LONG_RUN_MIN_RUNS = 3;       // spec §4.8: na if < 3 runs in week
 
 // ---- Strength / mobility (spec §4.12) ---------------------------------------

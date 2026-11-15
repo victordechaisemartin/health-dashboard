@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { rhrvBaseline, hrvStatus, sleepLast, todayVerdict } from "./kpis";
-import type { Daily, Hrv, Sleep } from "./data";
+import { rhrvBaseline, hrvStatus, sleepLast, todayVerdict, acuteChronicRatio, weeklyVolumeProgression, longRunShare } from "./kpis";
+import type { Activity, Daily, Hrv, Sleep } from "./data";
+import type { WeekSummary } from "./weeks";
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -224,5 +225,103 @@ describe("todayVerdict §4.4", () => {
   it("verdict still possible when only sleep is na", () => {
     // HRV is present and act → Easy
     expect(todayVerdict(OK, ACT, NA).value).toBe("Easy");
+  });
+});
+
+// ---- T020 helpers -----------------------------------------------------------
+
+function makeActivity(date: string, overrides: Partial<Activity> = {}): Activity {
+  return {
+    activity_id: 1, activity_date: date, activity_type: "running",
+    duration_s: 3600, distance_m: 10000, training_load: 100,
+    aerobic_te: 3.0, anaerobic_te: 0,
+    avg_hr: null, calories: null, name: null, created_at: null,
+    ...overrides,
+  };
+}
+
+function makeWeek(weekStart: string, totalHours: number, opts: {
+  inProgress?: boolean;
+  runKm?: number;
+  runSessions?: number;
+  longestKm?: number;
+  qualitySessions?: number;
+} = {}): WeekSummary {
+  const emptyBucket = () => ({ sessions: 0, hours: 0, km: 0, load: 0, longestDurationS: 0, longestKm: 0, qualitySessions: 0, longSessions: 0 });
+  return {
+    weekStart,
+    inProgress: opts.inProgress ?? false,
+    byBucket: {
+      cycling: emptyBucket(),
+      running: {
+        sessions: opts.runSessions ?? 3,
+        hours: totalHours,
+        km: opts.runKm ?? totalHours * 10,
+        load: 0,
+        longestDurationS: 0,
+        longestKm: opts.longestKm ?? (opts.runKm ?? totalHours * 10) * 0.25,
+        qualitySessions: opts.qualitySessions ?? 0,
+        longSessions: 0,
+      },
+      swimming: emptyBucket(),
+      walking: emptyBucket(),
+      weights: emptyBucket(),
+      sleep: emptyBucket(),
+    },
+    hardDays: 0,
+    activeDays: 3,
+    totalHours,
+    totalLoad: 0,
+  };
+}
+
+// ---- T020: phase 4 KPI edge cases -------------------------------------------
+
+describe("acuteChronicRatio §4.5", () => {
+  it("§6/6 chronic=0 → na", () => {
+    // 21 daily rows present (coverage ok) but zero activities → chronic=0
+    const daily: Daily[] = Array.from({ length: 22 }, (_, i) => {
+      const d = new Date(2026, 10, 15 - 21 + i);
+      return makeDaily(
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+        50
+      );
+    });
+    const r = acuteChronicRatio([], daily, TODAY);
+    expect(r.status).toBe("na");
+    expect(r.reason).toBeTruthy();
+  });
+});
+
+describe("weeklyVolumeProgression §4.6", () => {
+  it("§6/4 recovery-week rebound: 5→5→5→3(recovery)→5h, baseline=5h → 0% → ok", () => {
+    const weeks = [
+      makeWeek("2026-10-05", 5),
+      makeWeek("2026-10-12", 5),
+      makeWeek("2026-10-19", 5),
+      makeWeek("2026-10-26", 3),  // recovery week
+      makeWeek("2026-11-02", 5),  // bounce back = 0% vs 5h baseline
+    ];
+    const { hours } = weeklyVolumeProgression(weeks, TODAY);
+    expect(hours.status).toBe("ok");
+  });
+
+  it("§6/5 low base: 3h→3h→3h prior, 3.4h current (+13% < 15% limit) → ok", () => {
+    const weeks = [
+      makeWeek("2026-10-19", 3),
+      makeWeek("2026-10-26", 3),
+      makeWeek("2026-11-02", 3),
+      makeWeek("2026-11-09", 3.4), // +13% of 3h base < 15% low-base limit
+    ];
+    const { hours } = weeklyVolumeProgression(weeks, TODAY);
+    expect(hours.status).toBe("ok");
+  });
+});
+
+describe("longRunShare §4.8", () => {
+  it("§6/9 only 1 run last week → na", () => {
+    const weeks = [makeWeek("2026-11-09", 5, { runSessions: 1, runKm: 20, longestKm: 20 })];
+    const r = longRunShare(weeks, TODAY);
+    expect(r.status).toBe("na");
   });
 });

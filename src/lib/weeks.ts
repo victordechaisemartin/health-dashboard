@@ -72,6 +72,12 @@ function isLong(a: Activity, bucket: Bucket | null): boolean {
   return (a.duration_s ?? 0) >= LONG_DURATION_S;
 }
 
+/** Quality/long classification for a single activity — exported for the session table. */
+export function classifySession(a: Activity): { isQuality: boolean; isLong: boolean } {
+  const bucket = bucketOf(a.activity_type);
+  return { isQuality: isQuality(a), isLong: isLong(a, bucket) };
+}
+
 /** Build nWeeks of WeekSummary ending with the week that contains today. */
 export function weeklySeries(activities: Activity[], nWeeks: number, today: Date): WeekSummary[] {
   const currentWeekStart = weekStart(today);
