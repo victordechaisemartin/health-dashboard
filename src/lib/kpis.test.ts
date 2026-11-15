@@ -294,7 +294,8 @@ function makeWeek(weekStart: string, totalHours: number, opts: {
       },
       swimming: emptyBucket(),
       walking: emptyBucket(),
-      weights: emptyBucket(),
+      strength: emptyBucket(),
+      mobility: emptyBucket(),
       sleep: emptyBucket(),
     },
     hardDays: 0,
@@ -449,7 +450,7 @@ describe("strengthMobilityThisWeek §4.12", () => {
 
   it("2 sessions any day → ok", () => {
     const w = makeWeek("2026-11-09", 3, { inProgress: true });
-    w.byBucket.weights.sessions = 2;
+    w.byBucket.strength.sessions = 2;
     const r = strengthMobilityThisWeek([w], THURSDAY);
     expect(r.status).toBe("ok");
   });

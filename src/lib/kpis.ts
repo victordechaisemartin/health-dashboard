@@ -460,7 +460,7 @@ export function longRunShare(weeks: WeekSummary[], today: Date): KpiResult {
 
 // ---- §4.9 Days since last session -------------------------------------------
 
-const SPORT_BUCKET = { swim: "swimming", bike: "cycling", run: "running", strength: "weights" } as const;
+const SPORT_BUCKET = { swim: "swimming", bike: "cycling", run: "running", strength: "strength" } as const;
 
 export function daysSinceSport(
   activities: Activity[],
@@ -500,7 +500,7 @@ export function daysSinceSport(
 
 // ---- §4.10 Weekly training streak -------------------------------------------
 
-const STREAK_BUCKETS = ["cycling", "running", "swimming", "weights"] as const;
+const STREAK_BUCKETS = ["cycling", "running", "swimming", "strength"] as const;
 
 function weekSessionCount(w: WeekSummary): number {
   return STREAK_BUCKETS.reduce((s, b) => s + w.byBucket[b].sessions, 0);
@@ -578,7 +578,7 @@ export function activeDaysYtd(
 
 export function strengthMobilityThisWeek(weeks: WeekSummary[], today: Date): KpiResult {
   const current = weeks.find((w) => w.inProgress);
-  const sessions = current ? current.byBucket.weights.sessions : 0;
+  const sessions = current ? current.byBucket.strength.sessions + current.byBucket.mobility.sessions : 0;
   const target = STRENGTH_SESSION_TARGET;
   const rule = `${sessions}/${target} strength sessions this week`;
 

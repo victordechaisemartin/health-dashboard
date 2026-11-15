@@ -13,7 +13,7 @@ import {
 import { classifySession, weeklySeries } from "../lib/weeks";
 import { WEEKLY_VOLUME_LIMIT_PCT } from "../lib/targets";
 
-const TRAINING_BUCKETS = ["cycling", "running", "swimming", "weights"] as const;
+const TRAINING_BUCKETS = ["cycling", "running", "swimming", "strength"] as const;
 
 export default function Load({ data, refreshed }: {
   data: Bundle; refreshed?: string;

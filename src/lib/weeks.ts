@@ -40,7 +40,7 @@ function localDateStr(d: Date): string {
   return `${y}-${m}-${dd}`;
 }
 
-const TRAINING_BUCKETS: Bucket[] = ["cycling", "running", "swimming", "walking", "weights"];
+const TRAINING_BUCKETS: Bucket[] = ["cycling", "running", "swimming", "walking", "strength", "mobility"];
 
 function emptyBucketRow() {
   return { sessions: 0, hours: 0, km: 0, load: 0, longestDurationS: 0, longestKm: 0, qualitySessions: 0, longSessions: 0 };
@@ -49,7 +49,8 @@ function emptyBucketRow() {
 function emptyByBucket(): WeekSummary["byBucket"] {
   return {
     cycling: emptyBucketRow(), running: emptyBucketRow(), swimming: emptyBucketRow(),
-    walking: emptyBucketRow(), weights: emptyBucketRow(), sleep: emptyBucketRow(),
+    walking: emptyBucketRow(), strength: emptyBucketRow(), mobility: emptyBucketRow(),
+    sleep: emptyBucketRow(),
   };
 }
 

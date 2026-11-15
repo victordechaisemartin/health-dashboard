@@ -27,9 +27,9 @@ export function dataFreshness(b: Bundle): DataFreshness {
   };
 }
 
-export type Bucket = "cycling" | "running" | "swimming" | "walking" | "weights" | "sleep";
+export type Bucket = "cycling" | "running" | "swimming" | "walking" | "strength" | "mobility" | "sleep";
 
-export const ACTIVITY_BUCKETS: Bucket[] = ["cycling", "running", "swimming", "walking", "weights"];
+export const ACTIVITY_BUCKETS: Bucket[] = ["cycling", "running", "swimming", "walking", "strength", "mobility"];
 export const ALL_BUCKETS: Bucket[] = [...ACTIVITY_BUCKETS, "sleep"];
 
 export type BucketMeta = {
@@ -47,7 +47,8 @@ export const BUCKET_META: Record<Bucket, BucketMeta> = {
   running: { label: "Running", icon: "🏃", color: "#f87171", distance: true, paceStyle: "pace" },
   swimming: { label: "Swimming", icon: "🏊", color: "#38bdf8", distance: true, paceStyle: "pace" },
   walking: { label: "Walking", icon: "🚶", color: "#a3e635", distance: true, paceStyle: "pace" },
-  weights: { label: "Weights", icon: "🏋️", color: "#a78bfa", distance: false, paceStyle: "none" },
+  strength: { label: "Strength", icon: "🏋️", color: "#a78bfa", distance: false, paceStyle: "none" },
+  mobility: { label: "Mobility", icon: "🧘", color: "#c4b5fd", distance: false, paceStyle: "none" },
   sleep: { label: "Sleep", icon: "😴", color: "#818cf8", distance: false, paceStyle: "none" },
 };
 
@@ -63,9 +64,11 @@ const TYPE_MAP: Record<string, Bucket> = {
   lap_swimming: "swimming", open_water_swimming: "swimming", swimming: "swimming",
   // walking
   walking: "walking", casual_walking: "walking", speed_walking: "walking", hiking: "walking",
-  // weights / gym
-  strength_training: "weights", fitness_equipment: "weights", indoor_cardio: "weights",
-  training: "weights", strength: "weights", pilates: "weights", yoga: "weights", hiit: "weights",
+  // strength / gym
+  strength_training: "strength", fitness_equipment: "strength", indoor_cardio: "strength",
+  training: "strength", strength: "strength", hiit: "strength",
+  // mobility
+  yoga: "mobility", pilates: "mobility",
 };
 
 export function bucketOf(type: string | null | undefined): Bucket | null {
