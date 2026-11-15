@@ -65,7 +65,7 @@ async function sbGet(table, order) {
 export async function loadBundle() {
   const missing = missingConfig();
   if (missing.length) throw new NotConfiguredError(missing);
-  const [weighIns, activities, sleep, daily, dexa, bloods] = await Promise.all([
+  const [weighIns, activities, sleep, daily, dexa, bloods, hrv] = await Promise.all([
     sbGet("garmin_weigh_ins", "measured_date.asc"),
     sbGet("garmin_activities", "activity_date.asc"),
     sbGet("garmin_sleep", "sleep_date.asc"),
@@ -74,6 +74,7 @@ export async function loadBundle() {
     // must not take the whole dashboard down.
     sbGet("dexa_scans", "scan_date.asc").catch(() => []),
     sbGet("blood_panels", "panel_date.asc").catch(() => []),
+    sbGet("garmin_hrv", "hrv_date.asc").catch(() => []),
   ]);
-  return { weighIns, activities, sleep, daily, dexa, bloods, source: "supabase" };
+  return { weighIns, activities, sleep, daily, dexa, bloods, hrv, source: "supabase" };
 }

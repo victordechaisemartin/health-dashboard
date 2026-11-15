@@ -1,5 +1,31 @@
 // Activity classification + period maths shared across every page.
-import type { Activity, Sleep, Daily } from "./data";
+import type { Activity, Sleep, Daily, Bundle } from "./data";
+
+/** Real calendar date in Europe/Paris — distinct from datasetNow() which anchors to data. */
+export function today(): Date {
+  const s = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  // fr-FR formats as "DD/MM/YYYY"
+  const [d, m, y] = s.split("/").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+export type DataFreshness = {
+  summaryDate: string | null;
+  sleepDate: string | null;
+  hrvDate: string | null;
+};
+
+export function dataFreshness(b: Bundle): DataFreshness {
+  const last = <T extends { [k: string]: unknown }>(rows: T[], key: keyof T): string | null => {
+    if (!rows.length) return null;
+    return rows[rows.length - 1][key] as string | null;
+  };
+  return {
+    summaryDate: last(b.daily, "summary_date"),
+    sleepDate: last(b.sleep, "sleep_date"),
+    hrvDate: last(b.hrv, "hrv_date"),
+  };
+}
 
 export type Bucket = "cycling" | "running" | "swimming" | "walking" | "weights" | "sleep";
 
