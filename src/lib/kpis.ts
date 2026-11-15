@@ -3,7 +3,7 @@
 // Constitution VIII: all thresholds come from targets.ts, never inline.
 
 import type { Activity, Daily, Hrv, Sleep } from "./data";
-import { parseLocalDate, bucketOf } from "./metrics";
+import { parseLocalDate, bucketOf, sleepScoreOf } from "./metrics";
 import type { WeekSummary } from "./weeks";
 import {
   RHR_WATCH_BPM, RHR_ACT_BPM, RHR_BASELINE_MIN_DAYS,
@@ -50,27 +50,30 @@ export function rhrvBaseline(daily: Daily[], today: Date): KpiResult {
   const todayStr = localStr(today);
   const yesterdayStr = addDays(today, -1);
 
-  // today's row first; fall back to yesterday (sync runs at 05:15 UTC, §6/11)
-  let todayRow = daily.find((d) => d.summary_date === todayStr);
-  let isYesterday = false;
-  if (!todayRow) {
-    todayRow = daily.find((d) => d.summary_date === yesterdayStr);
-    isYesterday = true;
-  }
+  // Prefer today's row with a valid HR; fall back to yesterday if today is
+  // missing or has null resting_hr (sync runs at 05:15 UTC — §6/11).
+  const todayRow = daily.find((d) => d.summary_date === todayStr && d.resting_hr != null);
+  const yestRow = daily.find((d) => d.summary_date === yesterdayStr && d.resting_hr != null);
+  const readingRow = todayRow ?? yestRow;
+  const isYesterday = !todayRow && yestRow != null;
 
-  if (!todayRow || todayRow.resting_hr == null) {
+  if (!readingRow) {
     return { value: null, unit: "bpm", status: "na", rule: "No resting HR today", reason: "no daily row synced yet" };
   }
 
-  // 30-day baseline: the 30 days before today (excluding today)
+  // 30-day baseline: days strictly before the reading date (excludes the reading itself)
+  const readingStr = readingRow.summary_date;
   const cutoff = addDays(today, -30);
   const baseline = daily
-    .filter((d) => d.summary_date >= cutoff && d.summary_date < todayStr && d.resting_hr != null)
+    .filter((d) => d.summary_date >= cutoff && d.summary_date < readingStr && d.resting_hr != null)
     .map((d) => d.resting_hr as number);
+
+  // guaranteed non-null: readingRow was selected requiring resting_hr != null
+  const rhr = readingRow.resting_hr!;
 
   if (baseline.length < RHR_BASELINE_MIN_DAYS) {
     return {
-      value: todayRow.resting_hr,
+      value: rhr,
       unit: "bpm",
       status: "na",
       rule: `${baseline.length} days of baseline data (need ≥ ${RHR_BASELINE_MIN_DAYS})`,
@@ -79,19 +82,19 @@ export function rhrvBaseline(daily: Daily[], today: Date): KpiResult {
   }
 
   const avg = mean(baseline);
-  const delta = todayRow.resting_hr - avg;
+  const delta = rhr - avg;
   const deltaStr = delta >= 0 ? `+${delta.toFixed(0)}` : delta.toFixed(0);
   const avgRound = Math.round(avg);
   const label = isYesterday ? "yesterday's reading" : "today";
-  const ruleBase = `RHR ${todayRow.resting_hr} bpm (${deltaStr} vs ${avgRound} bpm 30d avg)${isYesterday ? " — " + label : ""}`;
+  const ruleBase = `RHR ${rhr} bpm (${deltaStr} vs ${avgRound} bpm 30d avg)${isYesterday ? " — " + label : ""}`;
 
   if (delta >= RHR_ACT_BPM) {
-    return { value: todayRow.resting_hr, unit: "bpm", status: "act", rule: `${ruleBase} — elevated; plan easy day` };
+    return { value: rhr, unit: "bpm", status: "act", rule: `${ruleBase} — elevated; plan easy day` };
   }
   if (delta >= RHR_WATCH_BPM) {
-    return { value: todayRow.resting_hr, unit: "bpm", status: "watch", rule: `${ruleBase} — slightly above baseline` };
+    return { value: rhr, unit: "bpm", status: "watch", rule: `${ruleBase} — slightly above baseline` };
   }
-  return { value: todayRow.resting_hr, unit: "bpm", status: "ok", rule: ruleBase };
+  return { value: rhr, unit: "bpm", status: "ok", rule: ruleBase };
 }
 
 // ---- §4.2 HRV vs Garmin baseline -------------------------------------------
@@ -162,12 +165,17 @@ export function sleepLast(sleep: Sleep[], today: Date): KpiResult {
   const hStr = hours.toFixed(1);
   const targetH = (SLEEP_TARGET_S / 3600).toFixed(1);
 
+  // Build unit string: "h · 76" (Garmin score) or "h · 76 est." (derived proxy)
+  const scoreVal = sleepScoreOf(todayRow);
+  const isEst = scoreVal != null && (todayRow.sleep_score == null || todayRow.sleep_score <= 0);
+  const unitStr = scoreVal != null ? `h · ${scoreVal}${isEst ? " est." : ""}` : "h";
+
   if (hours >= SLEEP_TARGET_S / 3600) {
-    return { value: hStr, unit: "h", target: `${targetH} h`, status: "ok", rule: `Sleep ${hStr} h — above target` };
+    return { value: hStr, unit: unitStr, target: `${targetH} h`, status: "ok", rule: `Sleep ${hStr} h — above target` };
   }
 
   if (hours >= SLEEP_WATCH_S / 3600) {
-    return { value: hStr, unit: "h", target: `${targetH} h`, status: "watch", rule: `Sleep ${hStr} h — below 7.5 h target` };
+    return { value: hStr, unit: unitStr, target: `${targetH} h`, status: "watch", rule: `Sleep ${hStr} h — below 7.5 h target` };
   }
 
   // < 6 h: act only on second consecutive night
@@ -176,12 +184,12 @@ export function sleepLast(sleep: Sleep[], today: Date): KpiResult {
 
   if (prevShort) {
     return {
-      value: hStr, unit: "h", target: `${targetH} h`,
+      value: hStr, unit: unitStr, target: `${targetH} h`,
       status: "act",
       rule: `Sleep ${hStr} h — under 6 h two nights running; prioritise rest`,
     };
   }
-  return { value: hStr, unit: "h", target: `${targetH} h`, status: "watch", rule: `Sleep ${hStr} h — under 6 h tonight` };
+  return { value: hStr, unit: unitStr, target: `${targetH} h`, status: "watch", rule: `Sleep ${hStr} h — under 6 h last night` };
 }
 
 // ---- §4.4 Today verdict -----------------------------------------------------

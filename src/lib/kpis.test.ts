@@ -105,6 +105,29 @@ describe("rhrvBaseline §4.1", () => {
     const r = rhrvBaseline(filtered, TODAY);
     expect(r.status).toBe("na");
   });
+
+  it("today row exists but resting_hr null → falls back to yesterday", () => {
+    // 20 prior rows that stop at 2026-11-13 (not yesterday), so yestStr is unambiguous
+    const prior = Array.from({ length: 20 }, (_, i) => {
+      const d = new Date(2026, 10, 15 - 21 + i); // 2026-10-25 to 2026-11-13
+      return makeDaily(
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+        50
+      );
+    });
+    const rows = [...prior, makeDaily(todayStr, null), makeDaily(yestStr, 51)];
+    const r = rhrvBaseline(rows, TODAY);
+    expect(r.status).not.toBe("na");
+    expect(r.value).toBe(51);
+    expect(r.rule).toContain("yesterday");
+  });
+
+  it("today null + no yesterday → na", () => {
+    // baseline rows without yesterday, today row has null resting_hr
+    const rows = [...baselineRows(TODAY).filter((d) => d.summary_date !== yestStr), makeDaily(todayStr, null)];
+    const r = rhrvBaseline(rows, TODAY);
+    expect(r.status).toBe("na");
+  });
 });
 
 // ---- §4.2 hrvStatus ---------------------------------------------------------

@@ -39,7 +39,6 @@ export default function Overview({ data, now, go, period, setPeriod, refreshed }
 
   return (
     <div>
-      <TodayCard data={data} today={realToday} />
       <PageHeader
         title="Overview"
         subtitle={`${current.label} vs ${prev.label} · ${data.activities.length} activities · ${data.sleep.length} sleep nights`}
@@ -55,6 +54,8 @@ export default function Overview({ data, now, go, period, setPeriod, refreshed }
         )}
         <SleepCard now={sleepNow} prev={sleepPrev} go={go} />
       </div>
+
+      <TodayCard data={data} today={realToday} />
 
       <div className="mt-4">
         <Card className="p-5">
@@ -245,10 +246,7 @@ function TodayCard({ data, today: todayDate }: { data: Bundle; today: Date }) {
               </div>
             </div>
 
-            {/* Days-since placeholder — replaced when T024 ships */}
-            <div className="mt-2 text-[11px] text-slate-600">
-              Days since: 🏊 – · 🚴 – · 🏃 – · 🏋️ – (available after phase 3)
-            </div>
+
           </>
         )}
       </Card>
