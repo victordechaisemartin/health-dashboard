@@ -8,9 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev        # local dev server at http://localhost:5173 (includes /api/* routes via vite shim)
 npm run build      # tsc + vite build
 npm run preview    # preview production build
+npm test           # vitest run (pure metric/KPI functions in src/lib/)
 ```
 
-No test suite. Type-check only: `npx tsc --noEmit`.
+Quality gate: `npx tsc --noEmit && npm test`. Both must pass before every commit.
 
 ## Architecture
 
@@ -36,6 +37,9 @@ In dev, `vite.config.ts` intercepts `/api/*` requests and runs the same handler 
 - `src/App.tsx` — loads data once, handles login wall, owns the hash router and the shared `period` state (this-month / 30-days / this-year slicer that persists across pages).
 - `src/lib/data.ts` — TypeScript types for every Supabase row (`WeighIn`, `Activity`, `Sleep`, `Daily`, `DexaScan`, `BloodPanel`, `BloodMarker`), plus `loadData()` and `Bundle`.
 - `src/lib/metrics.ts` — activity bucketing (`Bucket` type, `bucketOf()`, `TYPE_MAP`), period window maths (`datasetNow`, `periods`, `PeriodKey`), and `ALL_BUCKETS`.
+- `src/lib/targets.ts` — all KPI thresholds as named exports; every constant has a source comment. **This is the single file to edit when tuning coaching rules.**
+- `src/lib/weeks.ts` — `WeekSummary` type, `weekStart()`, `weeklySeries()`, `classifySession()`. Quality/long session classification lives here.
+- `src/lib/kpis.ts` — all KPI functions (`rhrvBaseline`, `hrvStatus`, `sleepLast`, `todayVerdict`, `acuteChronicRatio`, `weeklyVolumeProgression`, `sleepRolling7d`, `bedtimeConsistency`, `weightRateOfChange`, etc.). Each returns `KpiResult` with `value`, `status`, `rule`, and optional `reason`.
 - `src/lib/marker-info.ts` — blood marker reference ranges and descriptions (`MARKER_INFO`).
 - `src/lib/next-panel.ts` — printable "ask-your-doctor" blood test request sheet template.
 - `src/pages/` — one file per route; each receives `data: Bundle`, `now: Date`, `period`, `setPeriod`, `refreshed`.
@@ -47,6 +51,7 @@ In dev, `vite.config.ts` intercepts `/api/*` requests and runs the same handler 
 
 | What to change | File |
 |---|---|
+| KPI thresholds (coaching rules) | `src/lib/targets.ts` |
 | Blood test request sheet | `src/lib/next-panel.ts` |
 | AI coach system prompt | bottom of `api/chat.js` |
 | Nav sections | `src/components/Nav.tsx` (`NAV_SECTIONS`) |
