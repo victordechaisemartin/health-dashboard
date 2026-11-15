@@ -42,6 +42,11 @@ export const LONG_RUN_SHARE_WATCH = 0.30; // spec §4.8: > 30% → watch
 export const LONG_RUN_SHARE_ACT = 0.40;   // spec §4.8: > 40% → act
 export const LONG_RUN_MIN_RUNS = 3;       // spec §4.8: na if < 3 runs in week
 
+// ---- Days since last session (spec §4.9) ------------------------------------
+export const DAYS_SINCE_WATCH_ENDURANCE = 7;  // spec §4.9: swim/bike/run ≥ 7 d → watch (default)
+export const DAYS_SINCE_ACT_ENDURANCE = 14;   // spec §4.9: swim/bike/run ≥ 14 d → act (default)
+export const DAYS_SINCE_WATCH_STRENGTH = 8;   // spec §4.9: strength ≥ 8 d → watch (default)
+
 // ---- Strength / mobility (spec §4.12) ---------------------------------------
 export const STRENGTH_SESSION_TARGET = 2; // spec §4.12: ≥ 2 sessions/week
 

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { rhrvBaseline, hrvStatus, sleepLast, todayVerdict, acuteChronicRatio, weeklyVolumeProgression, longRunShare } from "./kpis";
+import {
+  rhrvBaseline, hrvStatus, sleepLast, todayVerdict,
+  acuteChronicRatio, weeklyVolumeProgression, longRunShare,
+  daysSinceSport, weeklyTrainingStreak, activeDaysYtd,
+  strengthMobilityThisWeek, intensityMinutesThisWeek,
+} from "./kpis";
 import type { Activity, Daily, Hrv, Sleep } from "./data";
 import type { WeekSummary } from "./weeks";
 
@@ -346,5 +351,131 @@ describe("longRunShare §4.8", () => {
     const weeks = [makeWeek("2026-11-09", 5, { runSessions: 1, runKm: 20, longestKm: 20 })];
     const r = longRunShare(weeks, TODAY);
     expect(r.status).toBe("na");
+  });
+});
+
+// ---- Phase 5: §4.9–4.13 -----------------------------------------------------
+
+function makeRunActivity(date: string, daysAgo = 0): Activity {
+  const d = new Date(2026, 10, 15 - daysAgo);
+  const s = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return makeActivity(s.length > 0 ? s : date, { activity_type: "running" });
+}
+
+describe("daysSinceSport §4.9", () => {
+  it("ok: ran today", () => {
+    const acts = [makeActivity(todayStr, { activity_type: "running" })];
+    const r = daysSinceSport(acts, TODAY);
+    expect(r.run.value).toBe(0);
+    expect(r.run.status).toBe("ok");
+  });
+
+  it("watch: last swim 8 days ago", () => {
+    const d = new Date(2026, 10, 7); // 8 days before Nov 15
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const acts = [makeActivity(dateStr, { activity_type: "swimming" })];
+    const r = daysSinceSport(acts, TODAY);
+    expect(r.swim.status).toBe("watch");
+    expect(r.swim.value).toBe(8);
+  });
+
+  it("act: last run 14 days ago", () => {
+    const d = new Date(2026, 10, 1);
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const acts = [makeActivity(dateStr, { activity_type: "running" })];
+    const r = daysSinceSport(acts, TODAY);
+    expect(r.run.status).toBe("act");
+  });
+
+  it("na: no strength ever", () => {
+    const r = daysSinceSport([], TODAY);
+    expect(r.strength.status).toBe("na");
+    expect(r.strength.reason).toBeTruthy();
+  });
+});
+
+function makeCountingWeek(weekStart: string, sessions = 4, inProgress = false): WeekSummary {
+  return makeWeek(weekStart, sessions * 1.0, { inProgress, runSessions: sessions });
+}
+
+describe("weeklyTrainingStreak §4.10", () => {
+  it("3 consecutive counting weeks → streak = 3", () => {
+    const weeks = [
+      makeCountingWeek("2026-10-26"),
+      makeCountingWeek("2026-11-02"),
+      makeCountingWeek("2026-11-09"),
+      makeWeek("2026-11-15", 1, { inProgress: true, runSessions: 1 }), // current, not yet counting
+    ];
+    const r = weeklyTrainingStreak(weeks, TODAY);
+    expect(r.value).toBe(3);
+  });
+
+  it("current week extends streak when it qualifies", () => {
+    const weeks = [
+      makeCountingWeek("2026-11-09"),
+      makeCountingWeek("2026-11-15", 4, true), // current week already has 4 sessions
+    ];
+    const r = weeklyTrainingStreak(weeks, TODAY);
+    expect(r.value).toBe(2);
+  });
+
+  it("non-counting week breaks streak", () => {
+    const weeks = [
+      makeCountingWeek("2026-10-26"),
+      makeWeek("2026-11-02", 1, { runSessions: 1 }), // only 1 session — not counting
+      makeCountingWeek("2026-11-09"),
+    ];
+    const r = weeklyTrainingStreak(weeks, TODAY);
+    expect(r.value).toBe(1); // only last completed week counts
+  });
+});
+
+describe("strengthMobilityThisWeek §4.12", () => {
+  const WEDNESDAY = new Date(2026, 10, 11); // Wed 11 Nov 2026
+  const THURSDAY = new Date(2026, 10, 12);  // Thu 12 Nov 2026
+
+  it("0 sessions on Wednesday → ok (too early)", () => {
+    const weeks = [makeWeek("2026-11-09", 3, { inProgress: true })]; // 0 strength sessions
+    const r = strengthMobilityThisWeek(weeks, WEDNESDAY);
+    expect(r.status).toBe("ok");
+  });
+
+  it("0 sessions on Thursday → act", () => {
+    const weeks = [makeWeek("2026-11-09", 3, { inProgress: true })];
+    const r = strengthMobilityThisWeek(weeks, THURSDAY);
+    expect(r.status).toBe("act");
+  });
+
+  it("2 sessions any day → ok", () => {
+    const w = makeWeek("2026-11-09", 3, { inProgress: true });
+    w.byBucket.weights.sessions = 2;
+    const r = strengthMobilityThisWeek([w], THURSDAY);
+    expect(r.status).toBe("ok");
+  });
+});
+
+describe("intensityMinutesThisWeek §4.13", () => {
+  it("ok: ≥ 150 intensity minutes", () => {
+    // Monday + Tuesday with enough minutes
+    const daily: Daily[] = [
+      makeDaily("2026-11-09", 50), // Mon (but that's last week — Mon is Nov 10)
+      makeDaily("2026-11-10", 50),
+      makeDaily("2026-11-11", 50),
+    ];
+    daily[0].moderate_min = 80; daily[0].vigorous_min = 0;
+    daily[1].moderate_min = 50; daily[1].vigorous_min = 25; // 50 + 50 = 100 → total 180
+    daily[2].moderate_min = 0;  daily[2].vigorous_min = 0;
+    // Week of Nov 15 starts on Mon Nov 10
+    const mon = new Date(2026, 10, 10);
+    // Mon-Tue: 80 + (50 + 50) = 180 >= 150
+    const r = intensityMinutesThisWeek([daily[0], daily[1]], new Date(2026, 10, 11));
+    expect(r.status).toBe("ok");
+  });
+
+  it("watch: < 150 intensity minutes", () => {
+    const daily: Daily[] = [makeDaily("2026-11-10", 50)];
+    daily[0].moderate_min = 30; daily[0].vigorous_min = 0;
+    const r = intensityMinutesThisWeek(daily, new Date(2026, 10, 10));
+    expect(r.status).toBe("watch");
   });
 });

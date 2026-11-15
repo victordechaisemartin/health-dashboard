@@ -8,8 +8,13 @@ import {
   periods, sleepStat, stepStat, windowStat, pct, today, dataFreshness,
   parseLocalDate, type Bucket, type PeriodKey,
 } from "../lib/metrics";
-import { AXIS_TICK, Card, GRID, KpiStat, PageHeader, Pill, PeriodMenu, TOOLTIP, Delta } from "../ui";
-import { rhrvBaseline, hrvStatus, sleepLast, todayVerdict } from "../lib/kpis";
+import { AXIS_TICK, Card, GRID, KpiStat, PageHeader, Pill, PeriodMenu, TOOLTIP, Delta, StatusDot } from "../ui";
+import {
+  rhrvBaseline, hrvStatus, sleepLast, todayVerdict,
+  daysSinceSport, weeklyTrainingStreak, activeDaysYtd,
+  strengthMobilityThisWeek, intensityMinutesThisWeek, qualitySessionsThisWeek,
+} from "../lib/kpis";
+import { weeklySeries } from "../lib/weeks";
 
 export default function Overview({ data, now, go, period, setPeriod, refreshed }: {
   data: Bundle; now: Date; go: (path: string) => void; period: PeriodKey; setPeriod: (p: PeriodKey) => void; refreshed?: string;
@@ -56,6 +61,7 @@ export default function Overview({ data, now, go, period, setPeriod, refreshed }
       </div>
 
       <TodayCard data={data} today={realToday} />
+      <ThisWeekCard data={data} today={realToday} />
 
       <div className="mt-4">
         <Card className="p-5">
@@ -193,6 +199,7 @@ function TodayCard({ data, today: todayDate }: { data: Bundle; today: Date }) {
     ?? data.daily.find((d) => d.summary_date === yesterdayStr);
   const steps = todayDaily?.total_steps;
   const goal = todayDaily?.step_goal;
+  const daySince = daysSinceSport(data.activities, todayDate);
 
   return (
     <div className="mb-5">
@@ -246,7 +253,19 @@ function TodayCard({ data, today: todayDate }: { data: Bundle; today: Date }) {
               </div>
             </div>
 
-
+            {/* Days since last session */}
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+              {(["swim", "bike", "run", "strength"] as const).map((sport) => {
+                const d = daySince[sport];
+                const icon = { swim: "🏊", bike: "🚴", run: "🏃", strength: "🏋️" }[sport];
+                const color = d.status === "act" ? "#f87171" : d.status === "watch" ? "#fbbf24" : d.status === "na" ? "#334155" : "#64748b";
+                return (
+                  <span key={sport} className="text-[11px]" style={{ color }}>
+                    {icon} {d.value != null ? `${d.value}d` : "–"}
+                  </span>
+                );
+              })}
+            </div>
           </>
         )}
       </Card>
@@ -287,5 +306,51 @@ function StepsCard({ now, prev, go }: {
         ))}
       </div>
     </button>
+  );
+}
+
+// ---- This week card (US-3) --------------------------------------------------
+
+function ThisWeekCard({ data, today: todayDate }: { data: Bundle; today: Date }) {
+  const weeks = useMemo(() => weeklySeries(data.activities, 52, todayDate), [data, todayDate]);
+  const current = weeks.find((w) => w.inProgress);
+  const hours = current ? +current.totalHours.toFixed(1) : 0;
+
+  const streak = weeklyTrainingStreak(weeks, todayDate);
+  const active = activeDaysYtd(data.activities, todayDate);
+  const strength = strengthMobilityThisWeek(weeks, todayDate);
+  const intensity = intensityMinutesThisWeek(data.daily, todayDate);
+  const quality = qualitySessionsThisWeek(weeks, todayDate);
+
+  const weekLabel = current ? `w/c ${current.weekStart.slice(5).replace("-", "/")}` : "";
+
+  return (
+    <div className="mb-4">
+      <Card className="p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">This week</span>
+          {weekLabel && <span className="text-xs text-slate-600">{weekLabel}</span>}
+        </div>
+
+        {/* Training quality row */}
+        <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-xl border border-slate-800/80 bg-slate-950/30 p-3">
+            <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Hours</div>
+            <div className="mt-1 font-display text-xl font-semibold text-white">{hours}</div>
+            <div className="mt-1 text-[10px] text-slate-500">training so far</div>
+          </div>
+          <KpiStat label="Quality" value={quality.value} unit={quality.unit} status={quality.status} rule={quality.rule} reason={quality.reason} />
+          <KpiStat label="Strength" value={strength.value} status={strength.status} rule={strength.rule} />
+          <KpiStat label="Intensity" value={intensity.value} unit={intensity.unit} status={intensity.status} rule={intensity.rule} />
+        </div>
+
+        {/* Consistency row */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <KpiStat label="Streak" value={streak.value} unit={streak.unit} status={streak.status} rule={streak.rule} />
+          <KpiStat label="Active days" value={active.thisWeek.value} unit={active.thisWeek.unit} status={active.thisWeek.status} rule={active.thisWeek.rule} />
+          <KpiStat label="Active YTD" value={active.ytd.value} status={active.ytd.status} rule={active.ytd.rule} />
+        </div>
+      </Card>
+    </div>
   );
 }

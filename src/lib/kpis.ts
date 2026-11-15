@@ -4,7 +4,7 @@
 
 import type { Activity, Daily, Hrv, Sleep } from "./data";
 import { parseLocalDate, bucketOf, sleepScoreOf } from "./metrics";
-import type { WeekSummary } from "./weeks";
+import { type WeekSummary, weekStart } from "./weeks";
 import {
   RHR_WATCH_BPM, RHR_ACT_BPM, RHR_BASELINE_MIN_DAYS,
   SLEEP_TARGET_S, SLEEP_WATCH_S, SLEEP_ACT_S,
@@ -15,6 +15,8 @@ import {
   LONG_RUN_SHARE_WATCH, LONG_RUN_SHARE_ACT, LONG_RUN_MIN_RUNS,
   QUALITY_AEROBIC_TE, QUALITY_ANAEROBIC_TE, QUALITY_DURATION_MAX_S,
   LONG_DURATION_S,
+  DAYS_SINCE_WATCH_ENDURANCE, DAYS_SINCE_ACT_ENDURANCE, DAYS_SINCE_WATCH_STRENGTH,
+  WEEKLY_COUNTING_SESSIONS, STRENGTH_SESSION_TARGET, INTENSITY_MIN_TARGET,
 } from "./targets";
 
 export type KpiStatus = "ok" | "watch" | "act" | "na";
@@ -424,4 +426,156 @@ export function longRunShare(weeks: WeekSummary[], today: Date): KpiResult {
     return { value: `${pct}%`, status: "watch", rule: `Longest run is ${pct}% of weekly km.${note}` };
   }
   return { value: `${pct}%`, status: "ok", rule: `Longest run is ${pct}% of weekly km` };
+}
+
+// ---- §4.9 Days since last session -------------------------------------------
+
+const SPORT_BUCKET = { swim: "swimming", bike: "cycling", run: "running", strength: "weights" } as const;
+
+export function daysSinceSport(
+  activities: Activity[],
+  today: Date,
+): Record<"swim" | "bike" | "run" | "strength", KpiResult> {
+  const todayStr = localStr(today);
+  const result = {} as Record<"swim" | "bike" | "run" | "strength", KpiResult>;
+
+  for (const sport of ["swim", "bike", "run", "strength"] as const) {
+    const bucket = SPORT_BUCKET[sport];
+    const latestDate = activities
+      .filter((a) => bucketOf(a.activity_type) === bucket && a.activity_date <= todayStr)
+      .map((a) => a.activity_date)
+      .sort()
+      .slice(-1)[0];
+
+    if (!latestDate) {
+      result[sport] = { value: null, status: "na", rule: `No ${sport} logged`, reason: "no activity of this type" };
+      continue;
+    }
+
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const days = Math.round((parseLocalDate(todayStr).getTime() - parseLocalDate(latestDate).getTime()) / msPerDay);
+    const watchAt = sport === "strength" ? DAYS_SINCE_WATCH_STRENGTH : DAYS_SINCE_WATCH_ENDURANCE;
+
+    if (sport !== "strength" && days >= DAYS_SINCE_ACT_ENDURANCE) {
+      result[sport] = { value: days, unit: "d", status: "act", rule: `${days}d since last ${sport} — time to train` };
+    } else if (days >= watchAt) {
+      result[sport] = { value: days, unit: "d", status: "watch", rule: `${days}d since last ${sport}` };
+    } else {
+      result[sport] = { value: days, unit: "d", status: "ok", rule: `${days}d since last ${sport}` };
+    }
+  }
+
+  return result;
+}
+
+// ---- §4.10 Weekly training streak -------------------------------------------
+
+const STREAK_BUCKETS = ["cycling", "running", "swimming", "weights"] as const;
+
+function weekSessionCount(w: WeekSummary): number {
+  return STREAK_BUCKETS.reduce((s, b) => s + w.byBucket[b].sessions, 0);
+}
+
+export function weeklyTrainingStreak(weeks: WeekSummary[], _today: Date): KpiResult {
+  const completed = weeks.filter((w) => !w.inProgress);
+  const current = weeks.find((w) => w.inProgress);
+
+  // Walk backwards from last completed week counting consecutive counting weeks
+  let streak = 0;
+  for (let i = completed.length - 1; i >= 0; i--) {
+    if (weekSessionCount(completed[i]) >= WEEKLY_COUNTING_SESSIONS) streak++;
+    else break;
+  }
+  // Current week extends streak once it qualifies
+  if (current && weekSessionCount(current) >= WEEKLY_COUNTING_SESSIONS) streak++;
+
+  // Best streak in the whole series
+  let best = 0;
+  let run = 0;
+  for (const w of [...completed, ...(current ? [current] : [])]) {
+    if (weekSessionCount(w) >= WEEKLY_COUNTING_SESSIONS) { run++; best = Math.max(best, run); }
+    else run = 0;
+  }
+
+  const unit = streak === 1 ? "week" : "weeks";
+  return { value: streak, unit, status: "ok", rule: `${streak} week streak · best ${best}` };
+}
+
+// ---- §4.11 Active days ------------------------------------------------------
+
+export function activeDaysYtd(
+  activities: Activity[],
+  today: Date,
+): { ytd: KpiResult; prevYtd: KpiResult; thisWeek: KpiResult } {
+  const todayStr = localStr(today);
+  const y = today.getFullYear();
+  const yearStart = `${y}-01-01`;
+  const prevYearStart = `${y - 1}-01-01`;
+  const prevYearToday = `${y - 1}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const weekStartStr = localStr(weekStart(today));
+
+  function countActiveDays(from: string, to: string): number {
+    const dates = new Set<string>();
+    for (const a of activities) {
+      if (a.activity_date >= from && a.activity_date <= to) dates.add(a.activity_date);
+    }
+    return dates.size;
+  }
+
+  const ytdDays = countActiveDays(yearStart, todayStr);
+  const prevYtdDays = countActiveDays(prevYearStart, prevYearToday);
+  const weekDays = countActiveDays(weekStartStr, todayStr);
+
+  const ytd: KpiResult = {
+    value: ytdDays,
+    status: "ok",
+    rule: prevYtdDays > 0 ? `${ytdDays} active days YTD vs ${prevYtdDays} last year` : `${ytdDays} active days YTD`,
+  };
+  const prevYtd: KpiResult = prevYtdDays > 0
+    ? { value: prevYtdDays, status: "ok", rule: `${prevYtdDays} active days same period last year` }
+    : { value: null, status: "na", rule: "No data for last year", reason: "no last-year data" };
+  const thisWeek: KpiResult = {
+    value: weekDays,
+    unit: "/7",
+    status: "ok",
+    rule: `${weekDays}/7 active days this week`,
+  };
+
+  return { ytd, prevYtd, thisWeek };
+}
+
+// ---- §4.12 Strength & mobility this week ------------------------------------
+
+export function strengthMobilityThisWeek(weeks: WeekSummary[], today: Date): KpiResult {
+  const current = weeks.find((w) => w.inProgress);
+  const sessions = current ? current.byBucket.weights.sessions : 0;
+  const target = STRENGTH_SESSION_TARGET;
+  const rule = `${sessions}/${target} strength sessions this week`;
+
+  // No act/watch status before Thursday (Mon=1, Tue=2, Wed=3 → too early; Thu=4+, Sun=0 → apply)
+  const dow = today.getDay();
+  const tooEarly = dow >= 1 && dow <= 3;
+  if (tooEarly || sessions >= target) return { value: sessions, status: "ok", rule };
+  if (sessions === 1) return { value: sessions, status: "watch", rule };
+  return { value: sessions, status: "act", rule };
+}
+
+// ---- §4.13 Intensity minutes this week --------------------------------------
+
+export function intensityMinutesThisWeek(daily: Daily[], today: Date): KpiResult {
+  const weekStartStr = localStr(weekStart(today));
+  const todayStr = localStr(today);
+
+  const totalMin = daily
+    .filter((d) => d.summary_date >= weekStartStr && d.summary_date <= todayStr)
+    .reduce((s, d) => s + (d.moderate_min ?? 0) + 2 * (d.vigorous_min ?? 0), 0);
+
+  const target = INTENSITY_MIN_TARGET;
+  return {
+    value: totalMin,
+    unit: "min",
+    target: `${target} min`,
+    status: totalMin >= target ? "ok" : "watch",
+    rule: `${totalMin}/${target} intensity min this week`,
+  };
 }
