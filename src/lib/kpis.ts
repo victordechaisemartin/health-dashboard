@@ -17,6 +17,7 @@ import {
   LONG_DURATION_S,
   DAYS_SINCE_WATCH_ENDURANCE, DAYS_SINCE_ACT_ENDURANCE, DAYS_SINCE_WATCH_STRENGTH,
   WEEKLY_COUNTING_SESSIONS, STRENGTH_SESSION_TARGET, INTENSITY_MIN_TARGET,
+  BEDTIME_WATCH_STD_MIN, BEDTIME_ACT_STD_MIN,
 } from "./targets";
 
 export type KpiStatus = "ok" | "watch" | "act" | "na";
@@ -44,6 +45,34 @@ function addDays(d: Date, n: number): string {
 
 function mean(vals: number[]): number {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+function std(vals: number[]): number {
+  const avg = mean(vals);
+  return Math.sqrt(vals.reduce((s, v) => s + (v - avg) ** 2, 0) / vals.length);
+}
+
+/** Convert a UTC ISO timestamp to minutes-from-18:00 in Europe/Paris local time.
+ *  Wraps past midnight so 23:30=330, 00:30=390 — prevents 23h false spread (§6/8). */
+function toParisMinutes(isoUtc: string): number | null {
+  const d = new Date(isoUtc);
+  if (isNaN(d.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Paris",
+    hour: "numeric", minute: "numeric", hour12: false,
+  }).formatToParts(d);
+  const h = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const m = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+  const totalMin = h * 60 + m;
+  return totalMin >= 18 * 60 ? totalMin - 18 * 60 : totalMin + 6 * 60;
+}
+
+/** Convert minutes-from-18:00 back to "HH:MM" display string. */
+function minFromEighteenToHHMM(m: number): string {
+  const totalMin = Math.round(m + 18 * 60) % (24 * 60);
+  const hh = Math.floor(totalMin / 60);
+  const mm = totalMin % 60;
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
 
 // ---- §4.1 Resting HR vs baseline -------------------------------------------
@@ -578,4 +607,69 @@ export function intensityMinutesThisWeek(daily: Daily[], today: Date): KpiResult
     status: totalMin >= target ? "ok" : "watch",
     rule: `${totalMin}/${target} intensity min this week`,
   };
+}
+
+// ---- §4.14 Sleep rolling average --------------------------------------------
+
+export function sleepRolling7d(sleep: Sleep[], today: Date): KpiResult {
+  const todayStr = localStr(today);
+  const last7 = sleep
+    .filter((s) => s.sleep_date <= todayStr && s.total_sleep_s != null)
+    .sort((a, b) => a.sleep_date.localeCompare(b.sleep_date))
+    .slice(-7);
+
+  if (last7.length < 3) {
+    return { value: null, status: "na", rule: "< 3 nights in last 7", reason: "not enough data" };
+  }
+
+  const avgS = last7.reduce((s, r) => s + r.total_sleep_s!, 0) / last7.length;
+  const hours = +(avgS / 3600).toFixed(1);
+  const targetH = (SLEEP_TARGET_S / 3600).toFixed(1);
+
+  if (avgS >= SLEEP_TARGET_S) {
+    return { value: hours, unit: "h", target: `${targetH} h`, status: "ok", rule: `7d avg ${hours} h — on target` };
+  }
+  if (avgS >= SLEEP_WATCH_S) {
+    return { value: hours, unit: "h", target: `${targetH} h`, status: "watch", rule: `7d avg ${hours} h — below 7.5 h target` };
+  }
+  return { value: hours, unit: "h", target: `${targetH} h`, status: "act", rule: `7d avg ${hours} h — consistently under 7 h` };
+}
+
+// ---- §4.14 Bedtime consistency ----------------------------------------------
+
+export function bedtimeConsistency(sleep: Sleep[], today: Date): KpiResult {
+  const todayStr = localStr(today);
+  const cutoff = addDays(today, -13); // last 14 nights inclusive
+
+  const rows = sleep
+    .filter((s) => s.sleep_date >= cutoff && s.sleep_date <= todayStr && s.started_at != null)
+    .sort((a, b) => a.sleep_date.localeCompare(b.sleep_date));
+
+  const bedMins = rows
+    .map((s) => toParisMinutes(s.started_at!))
+    .filter((v): v is number => v != null);
+
+  if (bedMins.length < 3) {
+    return { value: null, status: "na", rule: "< 3 nights with bedtime data in last 14 days", reason: "no started_at data" };
+  }
+
+  const sdMin = std(bedMins);
+  const avgBed = mean(bedMins);
+  const bedLabel = minFromEighteenToHHMM(avgBed);
+
+  const wakeRows = rows.filter((s) => s.ended_at != null);
+  const wakeMins = wakeRows.map((s) => toParisMinutes(s.ended_at!)).filter((v): v is number => v != null);
+  const wakeLabel = wakeMins.length >= 3 ? minFromEighteenToHHMM(mean(wakeMins)) : null;
+
+  const sdRound = Math.round(sdMin);
+  const timesStr = wakeLabel ? `avg ${bedLabel} → ${wakeLabel}` : `avg ${bedLabel}`;
+  const rule = `Bedtime SD ${sdRound} min · ${timesStr}`;
+
+  if (sdMin > BEDTIME_ACT_STD_MIN) {
+    return { value: sdRound, unit: "min SD", status: "act", rule: `${rule} — irregular bedtime` };
+  }
+  if (sdMin > BEDTIME_WATCH_STD_MIN) {
+    return { value: sdRound, unit: "min SD", status: "watch", rule };
+  }
+  return { value: sdRound, unit: "min SD", status: "ok", rule };
 }

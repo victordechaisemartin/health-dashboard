@@ -4,6 +4,7 @@ import {
   acuteChronicRatio, weeklyVolumeProgression, longRunShare,
   daysSinceSport, weeklyTrainingStreak, activeDaysYtd,
   strengthMobilityThisWeek, intensityMinutesThisWeek,
+  sleepRolling7d, bedtimeConsistency,
 } from "./kpis";
 import type { Activity, Daily, Hrv, Sleep } from "./data";
 import type { WeekSummary } from "./weeks";
@@ -477,5 +478,87 @@ describe("intensityMinutesThisWeek §4.13", () => {
     daily[0].moderate_min = 30; daily[0].vigorous_min = 0;
     const r = intensityMinutesThisWeek(daily, new Date(2026, 10, 10));
     expect(r.status).toBe("watch");
+  });
+});
+
+// ---- §4.14 sleepRolling7d ---------------------------------------------------
+
+describe("sleepRolling7d §4.14", () => {
+  it("ok: 7d avg ≥ 7.5 h", () => {
+    const nights = Array.from({ length: 7 }, (_, i) =>
+      makeSleep(`2026-11-${String(9 + i).padStart(2, "0")}`, 7.6 * 3600)
+    );
+    const r = sleepRolling7d(nights, TODAY);
+    expect(r.status).toBe("ok");
+    expect(Number(r.value)).toBeGreaterThanOrEqual(7.5);
+  });
+
+  it("watch: 7d avg 7–7.5 h", () => {
+    const nights = Array.from({ length: 7 }, (_, i) =>
+      makeSleep(`2026-11-${String(9 + i).padStart(2, "0")}`, 7.2 * 3600)
+    );
+    const r = sleepRolling7d(nights, TODAY);
+    expect(r.status).toBe("watch");
+  });
+
+  it("act: 7d avg < 7 h", () => {
+    const nights = Array.from({ length: 7 }, (_, i) =>
+      makeSleep(`2026-11-${String(9 + i).padStart(2, "0")}`, 6.5 * 3600)
+    );
+    const r = sleepRolling7d(nights, TODAY);
+    expect(r.status).toBe("act");
+  });
+
+  it("na: fewer than 3 nights", () => {
+    const nights = [makeSleep("2026-11-14", 7 * 3600), makeSleep("2026-11-15", 7 * 3600)];
+    const r = sleepRolling7d(nights, TODAY);
+    expect(r.status).toBe("na");
+  });
+});
+
+// ---- §4.14 bedtimeConsistency -----------------------------------------------
+
+// All started_at are UTC — tests run with TZ=Europe/Paris (CET = UTC+1 in November)
+
+describe("bedtimeConsistency §4.14", () => {
+  // Three nights: 23:50, 23:40, 00:20 Paris → 350, 340, 380 min from 18:00
+  // SD ≈ 17 min → ok; without wrap it would be ~662 min → act
+  it("§6/8: 23:40 and 00:20 → spread ~40 min, not 23 h", () => {
+    const nights: Sleep[] = [
+      makeSleep("2026-11-11", 27000, { started_at: "2026-11-11T22:50:00Z", ended_at: "2026-11-12T06:00:00Z" }), // 23:50 Paris
+      makeSleep("2026-11-12", 27000, { started_at: "2026-11-12T22:40:00Z", ended_at: "2026-11-13T06:00:00Z" }), // 23:40 Paris
+      makeSleep("2026-11-13", 27000, { started_at: "2026-11-13T23:20:00Z", ended_at: "2026-11-14T06:00:00Z" }), // 00:20 Paris
+    ];
+    const r = bedtimeConsistency(nights, TODAY);
+    expect(r.status).toBe("ok");
+    expect(Number(r.value)).toBeLessThan(30);
+  });
+
+  it("watch: SD 30–60 min", () => {
+    // nights spread ~45 min: 22:00, 22:30, 23:15 Paris
+    const nights: Sleep[] = [
+      makeSleep("2026-11-11", 27000, { started_at: "2026-11-11T21:00:00Z" }), // 22:00 Paris
+      makeSleep("2026-11-12", 27000, { started_at: "2026-11-12T21:30:00Z" }), // 22:30 Paris
+      makeSleep("2026-11-13", 27000, { started_at: "2026-11-13T22:15:00Z" }), // 23:15 Paris
+    ];
+    const r = bedtimeConsistency(nights, TODAY);
+    expect(r.status).toBe("watch");
+  });
+
+  it("act: SD > 60 min", () => {
+    // 21:00, 23:30, 01:00 Paris → 180, 330, 420 min from 18:00; SD ≈ 100 min
+    const nights: Sleep[] = [
+      makeSleep("2026-11-11", 27000, { started_at: "2026-11-11T20:00:00Z" }), // 21:00 Paris
+      makeSleep("2026-11-12", 27000, { started_at: "2026-11-12T22:30:00Z" }), // 23:30 Paris
+      makeSleep("2026-11-13", 27000, { started_at: "2026-11-14T00:00:00Z" }), // 01:00 Paris
+    ];
+    const r = bedtimeConsistency(nights, TODAY);
+    expect(r.status).toBe("act");
+  });
+
+  it("na: fewer than 3 nights with started_at", () => {
+    const nights = [makeSleep("2026-11-14", 27000, { started_at: "2026-11-13T22:00:00Z" })];
+    const r = bedtimeConsistency(nights, TODAY);
+    expect(r.status).toBe("na");
   });
 });
