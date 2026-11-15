@@ -4,9 +4,9 @@ import {
   acuteChronicRatio, weeklyVolumeProgression, longRunShare,
   daysSinceSport, weeklyTrainingStreak, activeDaysYtd,
   strengthMobilityThisWeek, intensityMinutesThisWeek,
-  sleepRolling7d, bedtimeConsistency,
+  sleepRolling7d, bedtimeConsistency, weightRateOfChange,
 } from "./kpis";
-import type { Activity, Daily, Hrv, Sleep } from "./data";
+import type { Activity, Daily, Hrv, Sleep, WeighIn } from "./data";
 import type { WeekSummary } from "./weeks";
 
 // ---- helpers ----------------------------------------------------------------
@@ -560,5 +560,64 @@ describe("bedtimeConsistency §4.14", () => {
     const nights = [makeSleep("2026-11-14", 27000, { started_at: "2026-11-13T22:00:00Z" })];
     const r = bedtimeConsistency(nights, TODAY);
     expect(r.status).toBe("na");
+  });
+});
+
+// ---- §4.16 weightRateOfChange -----------------------------------------------
+
+function makeWeighIn(date: string, weight_kg: number): WeighIn {
+  return {
+    measured_at: `${date}T08:00:00+00:00`,
+    measured_date: date,
+    weight_kg,
+    bmi: null, body_fat_pct: null, body_water_pct: null,
+    muscle_mass_kg: null, bone_mass_kg: null, raw_impedance: null,
+  };
+}
+
+// Build N evenly-spaced weigh-ins ending on TODAY, with slope kg/day
+function weighInSeries(n: number, slopePerDay: number, endWeight = 80): WeighIn[] {
+  return Array.from({ length: n }, (_, i) => {
+    const daysBack = n - 1 - i;
+    const d = new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate() - daysBack);
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return makeWeighIn(dateStr, +(endWeight - daysBack * slopePerDay).toFixed(2));
+  });
+}
+
+describe("weightRateOfChange §4.16", () => {
+  it("na: fewer than 4 weigh-ins in 28 days", () => {
+    const rows = [makeWeighIn("2026-11-13", 80), makeWeighIn("2026-11-14", 79.8), makeWeighIn("2026-11-15", 79.6)];
+    const r = weightRateOfChange(rows, TODAY);
+    expect(r.status).toBe("na");
+  });
+
+  it("ok: stable weight (≈ 0 kg/wk)", () => {
+    const rows = weighInSeries(10, 0, 80); // flat
+    const r = weightRateOfChange(rows, TODAY);
+    expect(r.status).toBe("ok");
+    expect(Math.abs(Number(r.value))).toBeLessThan(0.1);
+  });
+
+  it("ok: gaining weight shown neutrally", () => {
+    // +0.3 kg/day = +2.1 kg/week (gain) — positive slopePerDay in helper = gaining
+    const rows = weighInSeries(10, 0.3, 77);
+    const r = weightRateOfChange(rows, TODAY);
+    expect(r.status).toBe("ok");
+    expect(Number(r.value)).toBeGreaterThan(0); // positive slope = gaining
+  });
+
+  it("watch: losing 0.5–1.0 kg/week", () => {
+    // −0.1 kg/day = −0.7 kg/week — negative slopePerDay = losing
+    const rows = weighInSeries(14, -0.1, 80);
+    const r = weightRateOfChange(rows, TODAY);
+    expect(r.status).toBe("watch");
+  });
+
+  it("act: losing > 1.0 kg/week", () => {
+    // −0.2 kg/day = −1.4 kg/week
+    const rows = weighInSeries(14, -0.2, 80);
+    const r = weightRateOfChange(rows, TODAY);
+    expect(r.status).toBe("act");
   });
 });

@@ -2,7 +2,7 @@
 // Constitution VI: `reason` MUST be set whenever `value === null` or `status === "na"`.
 // Constitution VIII: all thresholds come from targets.ts, never inline.
 
-import type { Activity, Daily, Hrv, Sleep } from "./data";
+import type { Activity, Daily, Hrv, Sleep, WeighIn } from "./data";
 import { parseLocalDate, bucketOf, sleepScoreOf } from "./metrics";
 import { type WeekSummary, weekStart } from "./weeks";
 import {
@@ -18,6 +18,7 @@ import {
   DAYS_SINCE_WATCH_ENDURANCE, DAYS_SINCE_ACT_ENDURANCE, DAYS_SINCE_WATCH_STRENGTH,
   WEEKLY_COUNTING_SESSIONS, STRENGTH_SESSION_TARGET, INTENSITY_MIN_TARGET,
   BEDTIME_WATCH_STD_MIN, BEDTIME_ACT_STD_MIN,
+  WEIGHT_WATCH_LOSS_KG_WEEK, WEIGHT_ACT_LOSS_KG_WEEK, WEIGHT_MIN_WEIGH_INS,
 } from "./targets";
 
 export type KpiStatus = "ok" | "watch" | "act" | "na";
@@ -672,4 +673,54 @@ export function bedtimeConsistency(sleep: Sleep[], today: Date): KpiResult {
     return { value: sdRound, unit: "min SD", status: "watch", rule };
   }
   return { value: sdRound, unit: "min SD", status: "ok", rule };
+}
+
+// ---- §4.16 Weight rate of change --------------------------------------------
+
+export function weightRateOfChange(weighIns: WeighIn[], today: Date): KpiResult {
+  const todayStr = localStr(today);
+  const cutoff = addDays(today, -27); // last 28 days inclusive
+
+  const recent = weighIns
+    .filter((w) => w.measured_date >= cutoff && w.measured_date <= todayStr)
+    .sort((a, b) => a.measured_date.localeCompare(b.measured_date));
+
+  if (recent.length < WEIGHT_MIN_WEIGH_INS) {
+    return {
+      value: null, status: "na",
+      rule: `${recent.length}/${WEIGHT_MIN_WEIGH_INS} weigh-ins in last 28 days`,
+      reason: `need ≥ ${WEIGHT_MIN_WEIGH_INS} weigh-ins`,
+    };
+  }
+
+  // Linear regression slope (kg/day) → convert to kg/week
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const origin = parseLocalDate(recent[0].measured_date).getTime();
+  const xs = recent.map((w) => (parseLocalDate(w.measured_date).getTime() - origin) / msPerDay);
+  const ys = recent.map((w) => w.weight_kg);
+  const n = xs.length;
+  const sumX = xs.reduce((a, b) => a + b, 0);
+  const sumY = ys.reduce((a, b) => a + b, 0);
+  const sumXY = xs.reduce((s, x, i) => s + x * ys[i], 0);
+  const sumX2 = xs.reduce((s, x) => s + x * x, 0);
+  const denom = n * sumX2 - sumX * sumX;
+
+  if (denom === 0) {
+    return { value: null, status: "na", rule: "All weigh-ins on the same date", reason: "no date spread" };
+  }
+
+  const slopePerWeek = +((n * sumXY - sumX * sumY) / denom * 7).toFixed(2);
+  const loss = -slopePerWeek; // positive = losing, negative = gaining
+  const absRate = Math.abs(slopePerWeek);
+  const dirStr = slopePerWeek < -0.005 ? `+${absRate} kg/wk` : slopePerWeek > 0.005 ? `−${absRate} kg/wk` : "stable";
+  const nStr = `${n} weigh-ins · ${dirStr}`;
+
+  if (loss > WEIGHT_ACT_LOSS_KG_WEEK) {
+    return { value: slopePerWeek, unit: "kg/wk", status: "act", rule: `${nStr} — loss too fast; risk muscle loss` };
+  }
+  if (loss > WEIGHT_WATCH_LOSS_KG_WEEK) {
+    return { value: slopePerWeek, unit: "kg/wk", status: "watch", rule: `${nStr} — monitor closely` };
+  }
+  // Gains are shown neutrally
+  return { value: slopePerWeek, unit: "kg/wk", status: "ok", rule: nStr };
 }

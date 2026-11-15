@@ -224,6 +224,41 @@ def parse_hrv(h):
     }
 
 
+def parse_weigh_in(w):
+    # T035 gate: before this parser ships, hit /weight-service/weight/all and
+    # confirm that "weight", "muscleMass", "boneMass" arrive in kg (not grams).
+    # The Personal API header says "SI / human-readable" suggesting kg, but the
+    # weight endpoint has not been confirmed. If values come in grams, divide by
+    # 1000 before storing. sourceType filter keeps only Index S2 scale readings.
+    if not isinstance(w, dict):
+        return None
+    if w.get("sourceType") != "INDEX_SCALE":
+        return None
+    cal = w.get("calendarDate")
+    if not cal and isinstance(w.get("date"), str) and len(w["date"]) >= 10:
+        cal = w["date"][:10]
+    if not cal:
+        return None
+    weight_kg = _rnd(w.get("weight"), 2)
+    if weight_kg is None:
+        return None
+    # "date" is local time "YYYY-MM-DD HH:MM:SS"; _iso_from_space marks it UTC
+    # (best we can do without timezone metadata). It is used only as a unique key.
+    date_str = w.get("date", "")
+    measured_at = _iso_from_space(date_str) if len(str(date_str)) >= 19 else f"{cal}T00:00:00+00:00"
+    return {
+        "measured_at": measured_at,
+        "measured_date": cal,
+        "weight_kg": weight_kg,
+        "bmi": _rnd(w.get("bmi"), 1),
+        "body_fat_pct": _rnd(w.get("bodyFat"), 1),
+        "body_water_pct": _rnd(w.get("bodyWater"), 1),
+        "muscle_mass_kg": _rnd(w.get("muscleMass"), 2),
+        "bone_mass_kg": _rnd(w.get("boneMass"), 2),
+        "raw_impedance": _ni(w.get("rawImpedance")),
+    }
+
+
 # ---- Supabase upsert -------------------------------------------------------
 def upsert(url, key, table, rows, conflict):
     if not rows:
@@ -336,6 +371,21 @@ def main():
             if row: sleep_rows.append(row)
     print(f"  sleep: kept={len(sleep_rows)}")
 
+    # Weigh-ins (range call) — T035 gate: confirm units before relying on output
+    print("Fetching weigh-ins...")
+    status, obj = api_get(token, f"/weight-service/weight/all/{y_start}/{y_end}")
+    weigh_in_rows = []
+    if status == 204 or obj is None:
+        pass
+    elif status >= 300:
+        print(f"  weigh-ins: HTTP {status}, skipping")
+    else:
+        entries = obj if isinstance(obj, list) else (obj.get("weightEntries") or obj.get("dailyWeightSummaries") or [])
+        for w in (entries if isinstance(entries, list) else []):
+            row = parse_weigh_in(w)
+            if row: weigh_in_rows.append(row)
+    print(f"  weigh-ins: kept={len(weigh_in_rows)}")
+
     # HRV (range call, nested under hrvSummaries)
     print("Fetching HRV...")
     status, obj = api_get(token, f"/hrv-service/hrv/daily/{y_start}/{y_end}")
@@ -356,10 +406,11 @@ def main():
 
     print("\nUpserting to Supabase...")
     counts = [
-        ("garmin_activities",     activities, "activity_id"),
-        ("garmin_daily_summary",  daily_rows, "summary_date"),
-        ("garmin_sleep",          sleep_rows, "sleep_date"),
-        ("garmin_hrv",            hrv_rows,   "hrv_date"),
+        ("garmin_activities",     activities,     "activity_id"),
+        ("garmin_daily_summary",  daily_rows,     "summary_date"),
+        ("garmin_sleep",          sleep_rows,     "sleep_date"),
+        ("garmin_weigh_ins",      weigh_in_rows,  "measured_at"),
+        ("garmin_hrv",            hrv_rows,       "hrv_date"),
     ]
     for table, rows, conflict in counts:
         n = upsert(sb_url, sb_key, table, rows, conflict)
