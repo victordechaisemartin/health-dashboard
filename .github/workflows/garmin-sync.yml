@@ -16,6 +16,9 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    # Pagination + per-endpoint retries can stretch a run; cap it so a hung
+    # Garmin call doesn't drain the Actions minute budget.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 

@@ -20,9 +20,7 @@ Copy `.env.example` to `.env` and fill in:
 | `GARMIN_SUPABASE_SECRET_KEY` | A `sb_secret_...` key. Server-side only. |
 | `GARMIN_PERSONAL_API_KEY` | Garmin Personal API key (see "Daily sync" below) |
 | `GH_PASSWORD` | Dashboard access code. **Required on Vercel.** |
-| `GH_SESSION_TOKEN` | Any long random string (session cookie value) |
-| `ANTHROPIC_API_KEY` | Optional — enables the AI chat widget |
-| `ANTHROPIC_MODEL` | Optional — defaults to `claude-haiku-4-5-20251001` |
+| `GH_SESSION_TOKEN` | Session cookie value. **Required when `GH_PASSWORD` is set, must be ≥ 32 chars** (e.g. `openssl rand -hex 32`). Short / missing values are treated as unconfigured. |
 
 Never prefix a secret with `VITE_` — anything so prefixed is inlined into the
 browser bundle.
@@ -54,7 +52,16 @@ python etl/sync_personal_api.py                      # default: last 3 days
 ```
 
 The sync upserts to `garmin_activities`, `garmin_daily_summary`,
-`garmin_sleep`, and `garmin_hrv`. Running it twice is harmless.
+`garmin_sleep`, `garmin_weigh_ins` (Index S2 scale only — manual entries are
+skipped), and `garmin_hrv`. Activities paginate until the oldest row on a page
+predates the window, so a long `--days` run gets the whole history. Running it
+twice is harmless.
+
+Every run writes a row to `garmin_sync_runs` (`status` = `ok`/`failed`,
+per-endpoint `counts`, `error` text). The dashboard nav badge reads the latest
+row and turns amber when the last run failed or is older than 36 h. The script
+exits non-zero on any endpoint or upsert failure, so the GitHub Action goes red.
+A 204/no-data response is NOT a failure.
 
 A GitHub Action in `.github/workflows/garmin-sync.yml` runs it daily at
 05:15 UTC. It uses three repo secrets: `GARMIN_PERSONAL_API_KEY`,
@@ -90,19 +97,12 @@ vercel deploy --prod
 ```
 
 Set all env vars in the Vercel project settings before the first deploy.
-`GH_PASSWORD` is enforced on Vercel: `/api/data` and `/api/chat` return 401
-until it is set.
-
-## AI coach
-
-The chat bubble posts to `api/chat.js`, which compacts the last 30 days of
-data and asks Claude. Read-only. Without `ANTHROPIC_API_KEY` the widget shows
-a short "add your key" note.
+`GH_PASSWORD` is enforced on Vercel: `/api/data` returns 401 until it is set.
 
 ## Layout
 
 ```
-api/            Serverless routes: data (bundle), chat (coach), login (gate)
+api/            Serverless routes: data (bundle), login (gate)
 src/            Vite + React 19 + TypeScript + Tailwind v4 + Recharts
   pages/        one file per page
   lib/          data types, period maths, blood marker reference

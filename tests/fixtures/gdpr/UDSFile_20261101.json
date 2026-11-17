@@ -1,0 +1,16 @@
+[
+  {
+    "calendarDate": "2026-11-01",
+    "totalSteps": 8000,
+    "dailyStepGoal": 10000,
+    "totalDistanceMeters": 6500,
+    "totalKilocalories": 2200,
+    "activeKilocalories": 800,
+    "restingHeartRate": 48,
+    "minHeartRate": 42,
+    "maxHeartRate": 176,
+    "moderateIntensityMinutes": 15,
+    "vigorousIntensityMinutes": 45,
+    "floorsAscendedInMeters": 30.48
+  }
+]

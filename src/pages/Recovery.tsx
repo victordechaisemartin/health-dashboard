@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, ComposedChart, Line, LineChart,
-  ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import type { Bundle } from "../lib/data";
 import { fmtDate } from "../lib/data";
@@ -9,9 +9,9 @@ import { parseLocalDate, periods, sleepStat, sleepScoreOf, pct, today, type Peri
 import { AXIS_TICK, ChartCard, EmptyHint, GRID, PageHeader, PeriodMenu, Stat, TOOLTIP } from "../ui";
 
 const ACCENT = "#38bdf8";
-const C = { rhr: "#f87171", score: "#fbbf24", stress: "#fb923c", resp: "#6ee7b7", load: "#a78bfa" };
+const C = { rhr: "#f87171", score: "#fbbf24", stress: "#fb923c", resp: "#6ee7b7", load: "#a78bfa", hrv: "#34d399", hrvWeekly: "#60a5fa" };
 const HRV_DOT_COLOR: Record<string, string> = {
-  BALANCED: "#34d399", UNBALANCED: "#fbbf24", LOW: "#f87171", NO_STATUS: "#64748b",
+  BALANCED: "#34d399", UNBALANCED: "#fbbf24", LOW: "#f87171", POOR: "#b91c1c", NO_STATUS: "#64748b",
 };
 
 const inWin = (date: string, w: Window) => {
@@ -26,7 +26,6 @@ export default function Recovery({ data, now, period, setPeriod, refreshed }: {
   const { current, prev } = periods(now, period);
   const realToday = today();
   const lstr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const todayStr = lstr(realToday);
   const cutoff30 = lstr(new Date(realToday.getFullYear(), realToday.getMonth(), realToday.getDate() - 29));
 
   const daily = useMemo(
@@ -37,22 +36,28 @@ export default function Recovery({ data, now, period, setPeriod, refreshed }: {
     () => [...data.sleep].sort((a, b) => a.sleep_date.localeCompare(b.sleep_date)),
     [data]
   );
+  const hrv = useMemo(
+    () => [...data.hrv].sort((a, b) => a.hrv_date.localeCompare(b.hrv_date)),
+    [data]
+  );
 
   // ---- window aggregates (all from real fields) ----
   const stats = useMemo(() => {
     const agg = (w: Window) => {
       const d = daily.filter((r) => inWin(r.summary_date, w));
       const s = sleep.filter((r) => inWin(r.sleep_date, w));
+      const h = hrv.filter((r) => inWin(r.hrv_date, w));
       const acts = data.activities.filter((a) => inWin(a.activity_date, w));
       const rhr = mean(d.map((r) => r.resting_hr).filter((v): v is number => v != null));
       const stress = mean(s.map((r) => r.avg_stress).filter((v): v is number => v != null));
       const resp = mean(s.map((r) => r.avg_respiration).filter((v): v is number => v != null));
+      const hrvAvg = mean(h.map((r) => r.last_night_avg).filter((v): v is number => v != null));
       const load = acts.reduce((a, r) => a + (r.training_load || 0), 0);
       const sl = sleepStat(s);
-      return { rhr, stress, resp, load, score: sl.avgScore, hours: sl.avgHours, nDaily: d.length, nSleep: s.length };
+      return { rhr, stress, resp, load, hrvAvg, score: sl.avgScore, hours: sl.avgHours, nDaily: d.length, nSleep: s.length };
     };
     return { cur: agg(current), pre: agg(prev) };
-  }, [daily, sleep, data, current, prev]);
+  }, [daily, sleep, hrv, data, current, prev]);
   const { cur, pre } = stats;
 
   // ---- chart series (current window) ----
@@ -78,28 +83,21 @@ export default function Recovery({ data, now, period, setPeriod, refreshed }: {
       .map(([d, load]) => ({ date: fmtDate(d), load: Math.round(load) }));
   }, [data, current]);
 
-  // ---- HRV series (last 30 nights, colored by Garmin status) ----
+  // ---- HRV series (current window, colored by Garmin status) ----
   const hrvSeries = useMemo(() =>
-    [...data.hrv]
-      .filter((h) => h.hrv_date >= cutoff30 && h.hrv_date <= todayStr && h.last_night_avg != null)
-      .sort((a, b) => a.hrv_date.localeCompare(b.hrv_date))
+    hrv
+      .filter((h) => inWin(h.hrv_date, current) && (h.last_night_avg != null || h.weekly_avg != null))
       .map((h) => ({
         date: fmtDate(h.hrv_date),
         hrv: h.last_night_avg,
+        weekly: h.weekly_avg,
+        // Area with a tuple dataKey draws a shaded band between the two values.
+        band: h.baseline_low != null && h.baseline_high != null ? [h.baseline_low, h.baseline_high] : null,
         status: h.status ?? "NO_STATUS",
         fill: HRV_DOT_COLOR[h.status ?? "NO_STATUS"] ?? "#64748b",
       })),
-    [data, cutoff30, todayStr]
+    [hrv, current]
   );
-
-  // Most-recent Garmin baseline band (baseline_low / baseline_high)
-  const hrvBand = useMemo(() => {
-    const rows = data.hrv.filter((h) => h.baseline_low != null && h.baseline_high != null);
-    if (!rows.length) return null;
-    rows.sort((a, b) => a.hrv_date.localeCompare(b.hrv_date));
-    const last = rows[rows.length - 1];
-    return { low: last.baseline_low!, high: last.baseline_high! };
-  }, [data]);
 
   // 30-day mean RHR (excludes today; shown as baseline on the RHR chart)
   const rhrBaselineMean = useMemo(() => {
@@ -130,9 +128,11 @@ export default function Recovery({ data, now, period, setPeriod, refreshed }: {
         right={<PeriodMenu value={period} onChange={setPeriod} />}
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-7">
         <Stat label="Resting HR" value={cur.rhr != null ? Math.round(cur.rhr) : "–"} unit="bpm" color={C.rhr}
           delta={pct(cur.rhr || 0, pre.rhr || 0)} deltaGood={false} />
+        <Stat label="HRV" value={cur.hrvAvg != null ? Math.round(cur.hrvAvg) : "–"} unit="ms" color={C.hrv}
+          delta={pct(cur.hrvAvg || 0, pre.hrvAvg || 0)} deltaGood />
         <Stat label="Sleep score" value={cur.score ?? "–"} color={C.score}
           delta={pct(cur.score || 0, pre.score || 0)} deltaGood />
         <Stat label="Sleep hours" value={cur.hours ?? "–"} unit="h" color={ACCENT}
@@ -171,19 +171,17 @@ export default function Recovery({ data, now, period, setPeriod, refreshed }: {
         )}
       </ChartCard>
 
-      <ChartCard title="HRV last 30 nights" subtitle="last_night_avg · dot colour: green=balanced · amber=unbalanced · red=low" className="mb-4">
+      <ChartCard title="HRV" subtitle={`last_night_avg · 7-day avg · baseline band shaded · ${current.label} · green=balanced · amber=unbalanced · red=low · dark=poor`} className="mb-4">
         {hrvSeries.length ? (
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={240}>
             <ComposedChart data={hrvSeries} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
               <CartesianGrid {...GRID} />
               <XAxis dataKey="date" tick={AXIS_TICK} stroke="#334155" minTickGap={24} />
               <YAxis domain={["dataMin - 5", "dataMax + 5"]} tick={AXIS_TICK} stroke="#334155" unit="ms" width={48} />
               <Tooltip {...TOOLTIP} />
-              {hrvBand && (
-                <ReferenceArea y1={hrvBand.low} y2={hrvBand.high} fill="#34d399" fillOpacity={0.07}
-                  label={{ value: `${hrvBand.low}–${hrvBand.high}`, fill: "#34d399", fontSize: 10, position: "insideTopRight" }} />
-              )}
-              <Line type="monotone" dataKey="hrv" stroke="#64748b" strokeWidth={1.5} name="HRV"
+              <Area type="monotone" dataKey="band" stroke="none" fill={C.hrv} fillOpacity={0.1} name="Baseline" isAnimationActive={false} connectNulls />
+              <Line type="monotone" dataKey="weekly" stroke={C.hrvWeekly} strokeWidth={1.5} dot={false} name="Weekly avg" connectNulls isAnimationActive={false} />
+              <Line type="monotone" dataKey="hrv" stroke="#64748b" strokeWidth={1.5} name="Last night"
                 dot={(props: any) => {
                   if (props.cx == null || props.cy == null) return <g key={props.index} />;
                   return <circle key={props.index} cx={props.cx} cy={props.cy} r={4} fill={props.payload?.fill ?? "#64748b"} stroke="none" />;
@@ -192,7 +190,7 @@ export default function Recovery({ data, now, period, setPeriod, refreshed }: {
             </ComposedChart>
           </ResponsiveContainer>
         ) : (
-          <EmptyHint>No HRV data in the last 30 days.</EmptyHint>
+          <EmptyHint>No HRV data in this window.</EmptyHint>
         )}
       </ChartCard>
 

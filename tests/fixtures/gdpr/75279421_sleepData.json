@@ -1,0 +1,14 @@
+[
+  {
+    "calendarDate": "2026-11-15",
+    "sleepStartTimestampGMT": 1794785100000,
+    "sleepEndTimestampGMT": 1794810300000,
+    "deepSleepSeconds": 5000,
+    "lightSleepSeconds": 15000,
+    "remSleepSeconds": 7000,
+    "awakeSleepSeconds": 3000,
+    "sleepScores": {"overall": {"value": 82}},
+    "averageRespiration": 14.5,
+    "avgSleepStress": 23
+  }
+]

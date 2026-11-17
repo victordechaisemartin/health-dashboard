@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { lastRefreshed, loadData, login, type Bundle, type LoadResult } from "./lib/data";
 import { datasetNow, ALL_BUCKETS, type Bucket, type PeriodKey } from "./lib/metrics";
 import Nav from "./components/Nav";
-import ChatWidget from "./components/ChatWidget";
 import Overview from "./pages/Overview";
 import Health from "./pages/Health";
 import ActivityDetail from "./pages/ActivityDetail";
@@ -54,7 +53,7 @@ function Shell({ data }: { data: Bundle }) {
 
   return (
     <div className="min-h-full">
-      <Nav route={route} go={go} />
+      <Nav route={route} go={go} lastSync={data.lastSync} />
       <main className="md:pl-56">
         <div className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-8">
           <Page route={route} data={data} now={now} go={go} period={period} setPeriod={setPeriod} refreshed={refreshed} />
@@ -65,7 +64,6 @@ function Shell({ data }: { data: Bundle }) {
           </footer>
         </div>
       </main>
-      <ChatWidget />
     </div>
   );
 }

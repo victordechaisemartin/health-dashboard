@@ -137,6 +137,14 @@ export type BloodPanel = {
   created_at?: string | null;
 };
 
+export type SyncRun = {
+  run_at: string;
+  days: number;
+  status: "ok" | "failed";
+  counts: Record<string, number> | null;
+  error: string | null;
+};
+
 export type Bundle = {
   weighIns: WeighIn[];
   activities: Activity[];
@@ -145,6 +153,7 @@ export type Bundle = {
   dexa: DexaScan[];
   bloods: BloodPanel[];
   hrv: Hrv[];
+  lastSync: SyncRun | null;
   source: "supabase";
 };
 export type LoadResult =
@@ -171,6 +180,10 @@ export async function login(password: string): Promise<boolean> {
     body: JSON.stringify({ password }),
   });
   return r.ok;
+}
+
+export async function logout(): Promise<void> {
+  await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
 }
 
 // ---- derived helpers -------------------------------------------------------
