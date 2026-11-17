@@ -6,9 +6,9 @@ import path from "node:path";
 
 /**
  * Dev-only shim so `npm run dev` serves the same /api/* routes Vercel runs in
- * production (api/data.js, api/chat.js, api/login.js). Without it the browser
- * would have no data locally. The handlers are plain (req, res) functions, so
- * this only has to fake the few Vercel helpers they use.
+ * production (api/data.js, api/login.js). Without it the browser would have no
+ * data locally. The handlers are plain (req, res) functions, so this only has
+ * to fake the few Vercel helpers they use.
  */
 function apiDev(env: Record<string, string>): Plugin {
   return {

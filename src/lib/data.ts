@@ -58,6 +58,17 @@ export type Activity = {
   vigorous_min?: number | null;
   created_at?: string | null;
 };
+export type Hrv = {
+  hrv_date: string;
+  last_night_avg: number | null;
+  last_night_5min_high: number | null;
+  weekly_avg: number | null;
+  baseline_low: number | null;
+  baseline_high: number | null;
+  status: string | null;
+  created_at?: string | null;
+};
+
 export type Sleep = {
   sleep_date: string;
   total_sleep_s: number | null;
@@ -68,6 +79,8 @@ export type Sleep = {
   sleep_score: number | null;
   avg_respiration?: number | null;
   avg_stress?: number | null;
+  started_at?: string | null;
+  ended_at?: string | null;
   created_at?: string | null;
 };
 export type Daily = {
@@ -124,6 +137,14 @@ export type BloodPanel = {
   created_at?: string | null;
 };
 
+export type SyncRun = {
+  run_at: string;
+  days: number;
+  status: "ok" | "failed";
+  counts: Record<string, number> | null;
+  error: string | null;
+};
+
 export type Bundle = {
   weighIns: WeighIn[];
   activities: Activity[];
@@ -131,6 +152,8 @@ export type Bundle = {
   daily: Daily[];
   dexa: DexaScan[];
   bloods: BloodPanel[];
+  hrv: Hrv[];
+  lastSync: SyncRun | null;
   source: "supabase";
 };
 export type LoadResult =
@@ -159,6 +182,10 @@ export async function login(password: string): Promise<boolean> {
   return r.ok;
 }
 
+export async function logout(): Promise<void> {
+  await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
+}
+
 // ---- derived helpers -------------------------------------------------------
 export const last = <T,>(a: T[]): T | undefined => a[a.length - 1];
 
@@ -169,7 +196,7 @@ export function lastRefreshed(b: Bundle): string | null {
   const scan = (rows: { created_at?: string | null }[]) => {
     for (const r of rows) if (r.created_at && r.created_at > max) max = r.created_at;
   };
-  scan(b.weighIns); scan(b.activities); scan(b.sleep); scan(b.daily);
+  scan(b.weighIns); scan(b.activities); scan(b.sleep); scan(b.daily); scan(b.hrv);
   if (!max) return null;
   const d = new Date(max);
   if (isNaN(d.getTime())) return null;

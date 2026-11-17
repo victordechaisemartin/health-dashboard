@@ -4,8 +4,9 @@ import {
 } from "recharts";
 import type { Bundle } from "../lib/data";
 import { fmtDate, last, recent, rolling } from "../lib/data";
-import { parseLocalDate, periods, type PeriodKey } from "../lib/metrics";
-import { AXIS_TICK, ChartCard, GRID, PageHeader, PeriodMenu, Stat, TOOLTIP } from "../ui";
+import { parseLocalDate, periods, today, type PeriodKey } from "../lib/metrics";
+import { AXIS_TICK, ChartCard, GRID, KpiStat, PageHeader, PeriodMenu, Stat, TOOLTIP } from "../ui";
+import { weightRateOfChange } from "../lib/kpis";
 
 const C = { weight: "#6ee7b7", fat: "#fbbf24", muscle: "#818cf8", sleep: "#a78bfa", hr: "#f87171", steps: "#38bdf8" };
 
@@ -13,6 +14,7 @@ export default function Health({ data, now, period, setPeriod, refreshed }: {
   data: Bundle; now: Date; period: PeriodKey; setPeriod: (p: PeriodKey) => void; refreshed?: string;
 }) {
   const { current, prev } = periods(now, period);
+  const realToday = today();
   const inCur = (d: string) => { const t = parseLocalDate(d).getTime(); return t >= current.start.getTime() && t <= current.end.getTime(); };
   const inPrev = (d: string) => { const t = parseLocalDate(d).getTime(); return t >= prev.start.getTime() && t <= prev.end.getTime(); };
 
@@ -57,6 +59,8 @@ export default function Health({ data, now, period, setPeriod, refreshed }: {
   }, [sleep]);
   const latestRhr = last(daily.filter((d) => d.resting_hr))?.resting_hr ?? "–";
 
+  const weightRate = useMemo(() => weightRateOfChange(wiAll, realToday), [wiAll, realToday]);
+
   const pd = (from?: number | null, to?: number | null) =>
     from == null || to == null || !from ? null : Math.round(((to - from) / from) * 100);
 
@@ -70,6 +74,10 @@ export default function Health({ data, now, period, setPeriod, refreshed }: {
         refreshed={refreshed}
         right={<PeriodMenu value={period} onChange={setPeriod} />}
       />
+
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-1">
+        <KpiStat label="Weight trend (28d)" value={weightRate.value} unit={weightRate.unit} status={weightRate.status} rule={weightRate.rule} reason={weightRate.reason} />
+      </div>
 
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
         <Stat label="Weight" value={latest?.weight_kg ?? "–"} unit="kg" color={C.weight} delta={pd(prevLatest?.weight_kg, latest?.weight_kg)} deltaGood={false} />

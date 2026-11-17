@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { lastRefreshed, loadData, login, type Bundle, type LoadResult } from "./lib/data";
 import { datasetNow, ALL_BUCKETS, type Bucket, type PeriodKey } from "./lib/metrics";
 import Nav from "./components/Nav";
-import ChatWidget from "./components/ChatWidget";
 import Overview from "./pages/Overview";
 import Health from "./pages/Health";
 import ActivityDetail from "./pages/ActivityDetail";
@@ -11,6 +10,7 @@ import StepsPage from "./pages/StepsPage";
 import TrainingPlan from "./pages/TrainingPlan";
 import RacePlan from "./pages/RacePlan";
 import Recovery from "./pages/Recovery";
+import Load from "./pages/Load";
 import BodyComp from "./pages/BodyComp";
 import Bloods from "./pages/Bloods";
 
@@ -53,7 +53,7 @@ function Shell({ data }: { data: Bundle }) {
 
   return (
     <div className="min-h-full">
-      <Nav route={route} go={go} />
+      <Nav route={route} go={go} lastSync={data.lastSync} />
       <main className="md:pl-56">
         <div className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-8">
           <Page route={route} data={data} now={now} go={go} period={period} setPeriod={setPeriod} refreshed={refreshed} />
@@ -64,7 +64,6 @@ function Shell({ data }: { data: Bundle }) {
           </footer>
         </div>
       </main>
-      <ChatWidget />
     </div>
   );
 }
@@ -78,6 +77,7 @@ function Page({ route, data, now, go, period, setPeriod, refreshed }: {
   if (route === "/health") return <Health data={data} now={now} {...p} />;
   if (route === "/sleep") return <SleepPage data={data} now={now} {...p} />;
   if (route === "/recovery") return <Recovery data={data} now={now} {...p} />;
+  if (route === "/load") return <Load data={data} refreshed={refreshed} />;
   if (route === "/body") return <BodyComp data={data} refreshed={refreshed} />;
   if (route === "/bloods") return <Bloods data={data} refreshed={refreshed} />;
   if (route === "/plan") return <TrainingPlan refreshed={refreshed} />;

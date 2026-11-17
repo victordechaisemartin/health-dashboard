@@ -8,9 +8,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev        # local dev server at http://localhost:5173 (includes /api/* routes via vite shim)
 npm run build      # tsc + vite build
 npm run preview    # preview production build
+npm test           # TZ=Europe/Paris vitest run — unit tests in src/lib/*.test.ts
+pytest tests/      # Python ETL parser tests (fixtures under tests/fixtures/)
 ```
 
-No test suite. Type-check only: `npx tsc --noEmit`.
+Quality gate: `npx tsc --noEmit && npm test && pytest tests/`. All three must pass before every commit; `.github/workflows/ci.yml` runs the same sequence on push and pull_request.
 
 ## Architecture
 
@@ -19,12 +21,13 @@ No test suite. Type-check only: `npx tsc --noEmit`.
 ### Data flow
 
 ```
-Supabase (4 tables)  →  api/_bundle.js  →  api/data.js  →  browser fetch /api/data  →  src/lib/data.ts
+Supabase (8 tables)  →  api/_bundle.js  →  api/data.js  →  browser fetch /api/data  →  src/lib/data.ts
 ```
+
+Tables: `garmin_weigh_ins`, `garmin_activities`, `garmin_sleep`, `garmin_daily_summary`, `garmin_hrv`, plus the optional `dexa_scans`, `blood_panels`, and `garmin_sync_runs` (each `.catch(() => [])` / `null` so a missing side-table doesn't fail the whole bundle). `garmin_sync_runs` logs one row per ETL run (`status`, per-endpoint `counts`, `error`); the newest row surfaces in the nav badge as "Last sync … · ok/failed" (amber when failed or > 36 h stale).
 
 - `api/_bundle.js` — shared server code. `loadBundle()` paginates Supabase via raw `fetch` (no SDK) with the `apikey` header; throws `NotConfiguredError` when env vars are missing.
 - `api/data.js` — single `/api/data` endpoint. Returns 503 `{ error: "not_configured", missing }` with no config; 401 `{ error: "unprotected" }` when `VERCEL=1` but `GH_PASSWORD` is unset; 401 `{ error: "auth" }` when the session cookie is missing.
-- `api/chat.js` — `/api/chat` endpoint; same guards; compacts last-30-days into a prompt and calls Claude.
 - `api/login.js` — password gate; sets httpOnly cookie (`gh_auth`). Required on Vercel.
 
 In dev, `vite.config.ts` intercepts `/api/*` requests and runs the same handler files directly (no Vercel CLI needed).
@@ -36,19 +39,21 @@ In dev, `vite.config.ts` intercepts `/api/*` requests and runs the same handler 
 - `src/App.tsx` — loads data once, handles login wall, owns the hash router and the shared `period` state (this-month / 30-days / this-year slicer that persists across pages).
 - `src/lib/data.ts` — TypeScript types for every Supabase row (`WeighIn`, `Activity`, `Sleep`, `Daily`, `DexaScan`, `BloodPanel`, `BloodMarker`), plus `loadData()` and `Bundle`.
 - `src/lib/metrics.ts` — activity bucketing (`Bucket` type, `bucketOf()`, `TYPE_MAP`), period window maths (`datasetNow`, `periods`, `PeriodKey`), and `ALL_BUCKETS`.
+- `src/lib/targets.ts` — all KPI thresholds as named exports; every constant has a source comment. **This is the single file to edit when tuning coaching rules.**
+- `src/lib/weeks.ts` — `WeekSummary` type, `weekStart()`, `weeklySeries()`, `classifySession()`. Quality/long session classification lives here.
+- `src/lib/kpis.ts` — all KPI functions (`rhrvBaseline`, `hrvStatus`, `sleepLast`, `todayVerdict`, `acuteChronicRatio`, `weeklyVolumeProgression`, `sleepRolling7d`, `bedtimeConsistency`, `weightRateOfChange`, etc.). Each returns `KpiResult` with `value`, `status`, `rule`, and optional `reason`.
 - `src/lib/marker-info.ts` — blood marker reference ranges and descriptions (`MARKER_INFO`).
 - `src/lib/next-panel.ts` — printable "ask-your-doctor" blood test request sheet template.
 - `src/pages/` — one file per route; each receives `data: Bundle`, `now: Date`, `period`, `setPeriod`, `refreshed`.
 - `src/ui.tsx` — shared chart constants (`AXIS_TICK`, `TOOLTIP`, `GRID`). Use these in every Recharts chart.
 - `src/components/Nav.tsx` — sidebar nav with `NAV_SECTIONS`. `WorkWithUs` component also lives here.
-- `src/components/ChatWidget.tsx` — floating chat bubble; calls `/api/chat`.
 
 ### Personalisation points
 
 | What to change | File |
 |---|---|
+| KPI thresholds (coaching rules) | `src/lib/targets.ts` |
 | Blood test request sheet | `src/lib/next-panel.ts` |
-| AI coach system prompt | bottom of `api/chat.js` |
 | Nav sections | `src/components/Nav.tsx` (`NAV_SECTIONS`) |
 
 Race Plan and Training Plan pages render a single "No plan yet" card — no plan logic ships with the repo.
@@ -61,9 +66,7 @@ Race Plan and Training Plan pages render a single "No plan yet" card — no plan
 | `GARMIN_SUPABASE_SECRET_KEY` | `sb_secret_...` key; server-side only |
 | `GARMIN_PERSONAL_API_KEY` | Garmin Personal API key (daily sync) |
 | `GH_PASSWORD` | Dashboard password gate; **required on Vercel** |
-| `GH_SESSION_TOKEN` | Cookie value for the gate |
-| `ANTHROPIC_API_KEY` | Enables AI coach |
-| `ANTHROPIC_MODEL` | Defaults to `claude-haiku-4-5-20251001` |
+| `GH_SESSION_TOKEN` | Cookie value for the gate; **required when `GH_PASSWORD` is set, must be ≥ 32 chars**. Password + cookie are compared via SHA-256 + `timingSafeEqual`; `/api/logout` clears the cookie. |
 
 Two ETL entry points: `etl/load_export.py` (one-off GDPR import, cm/kJ units) and `etl/sync_personal_api.py` (daily Personal API sync, already m/s/kcal). The latter is called from `.github/workflows/garmin-sync.yml` on cron.
 

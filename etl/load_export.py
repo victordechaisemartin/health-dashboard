@@ -18,6 +18,11 @@ Units are normalised here so the DB columns are human-readable:
 """
 import argparse, glob, json, os, sys
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+# Scale readings store a GMT timestamp; the "calendar date" users expect is the
+# local date. Without this, a weigh-in just after midnight lands on the previous day.
+LOCAL_TZ = ZoneInfo("Europe/Paris")
 
 # ---------------------------------------------------------------- helpers
 def load_json(path):
@@ -55,12 +60,14 @@ def parse_weigh_ins(root):
             w = rec.get("weight")
             if not isinstance(w, dict) or w.get("sourceType") != "INDEX_SCALE":
                 continue
-            ts = epoch_ms_to_iso(_ts_ms(w.get("timestampGMT")))
+            ms = _ts_ms(w.get("timestampGMT"))
+            ts = epoch_ms_to_iso(ms)
             if not ts:
                 continue
+            local_date = datetime.fromtimestamp(ms / 1000, tz=LOCAL_TZ).date().isoformat()
             out[ts] = {
                 "measured_at": ts,
-                "measured_date": ts[:10],
+                "measured_date": local_date,
                 "weight_kg": g_to_kg(w.get("weight")),
                 "bmi": rnd(nz(w.get("bmi"))),
                 "body_fat_pct": rnd(nz(w.get("bodyFat"))),

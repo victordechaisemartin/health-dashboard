@@ -1,0 +1,35 @@
+[{
+  "summarizedActivitiesExport": [
+    {
+      "activityId": 100,
+      "activityType": "running",
+      "startTimeGmt": 1794697200000,
+      "startTimeLocal": 1794700800000,
+      "name": "DST-safe local-date test",
+      "duration": 3600500,
+      "distance": 1022251,
+      "elevationGain": 5051,
+      "calories": 3348.8,
+      "avgHr": 176.0,
+      "maxHr": 191.0,
+      "aerobicTrainingEffect": 4.5,
+      "anaerobicTrainingEffect": 0.0,
+      "activityTrainingLoad": 150.75,
+      "moderateIntensityMinutes": 5,
+      "vigorousIntensityMinutes": 50
+    },
+    {
+      "activityId": 101,
+      "activityType": "multi_sport",
+      "parent": true,
+      "startTimeGmt": 1794734000000,
+      "startTimeLocal": 1794737600000
+    },
+    {
+      "activityId": 102,
+      "activityType": "transition_v2",
+      "startTimeGmt": 1794734200000,
+      "startTimeLocal": 1794737800000
+    }
+  ]
+}]

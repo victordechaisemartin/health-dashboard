@@ -1,0 +1,22 @@
+[
+  {
+    "weight": {
+      "sourceType": "INDEX_SCALE",
+      "timestampGMT": 1794785100000,
+      "weight": 80099.0,
+      "bmi": 25.5,
+      "bodyFat": 18.3,
+      "bodyWater": 55.2,
+      "muscleMass": 62000.0,
+      "boneMass": 3200.0,
+      "rawImpedance": 460
+    }
+  },
+  {
+    "weight": {
+      "sourceType": "MANUAL",
+      "timestampGMT": 1794785100000,
+      "weight": 80000.0
+    }
+  }
+]

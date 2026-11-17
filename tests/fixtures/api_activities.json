@@ -1,0 +1,41 @@
+[
+  {
+    "activityId": 1,
+    "activityType": {"typeKey": "running"},
+    "startTimeLocal": "2026-11-15 00:15:00",
+    "startTimeGMT": "2026-11-14 23:15:00",
+    "activityName": "late-evening run",
+    "duration": 3600.5,
+    "distance": 10000.5,
+    "averageHR": 176.0,
+    "maxHR": 191.0,
+    "calories": 800.3,
+    "elevationGain": 50.5,
+    "aerobicTrainingEffect": 4.5,
+    "anaerobicTrainingEffect": 0.0,
+    "activityTrainingLoad": 150.75,
+    "moderateIntensityMinutes": 5,
+    "vigorousIntensityMinutes": 50
+  },
+  {
+    "activityId": 2,
+    "activityType": {"typeKey": "multi_sport"},
+    "parent": true,
+    "startTimeLocal": "2026-11-15 06:00:00",
+    "startTimeGMT": "2026-11-15 05:00:00"
+  },
+  {
+    "activityId": 3,
+    "activityType": {"typeKey": "transition_v2"},
+    "startTimeLocal": "2026-11-15 06:30:00",
+    "startTimeGMT": "2026-11-15 05:30:00"
+  },
+  {
+    "activityId": 4,
+    "activityType": {"typeKey": "cycling"},
+    "startTimeLocal": "2026-11-15 07:00:00",
+    "startTimeGMT": "2026-11-15 06:00:00",
+    "distance": 20000,
+    "duration": 1800
+  }
+]

@@ -1,6 +1,7 @@
 // Shared visual primitives + chart theme. Imported by every page.
 import type { ReactNode } from "react";
 import type { PeriodKey } from "./lib/metrics";
+import type { KpiStatus } from "./lib/kpis";
 
 export const AXIS_TICK = { fontSize: 11, fill: "#94a3b8" } as const;
 export const TOOLTIP = {
@@ -139,6 +140,51 @@ export function SegMenu<T extends string>({ value, options, onChange }: {
 
 export function EmptyHint({ children }: { children: ReactNode }) {
   return <div className="grid place-items-center py-12 text-center text-sm text-slate-600">{children}</div>;
+}
+
+const STATUS_COLOR: Record<KpiStatus, string> = {
+  ok: "#34d399",    // emerald-400
+  watch: "#fbbf24", // amber-400
+  act: "#f87171",   // rose-400
+  na: "#64748b",    // slate-500
+};
+
+export function StatusDot({ status }: { status: KpiStatus }) {
+  return (
+    <span
+      className="inline-block h-2 w-2 rounded-full"
+      style={{ background: STATUS_COLOR[status] }}
+      aria-label={status}
+    />
+  );
+}
+
+/** KPI tile: label, value with status dot, optional rule/reason text. */
+export function KpiStat({ label, value, unit, status, rule, reason }: {
+  label: string;
+  value: number | string | null;
+  unit?: string;
+  status: KpiStatus;
+  rule: string;
+  reason?: string;
+}) {
+  const displayValue = value != null ? String(value) : "–";
+  const sub = value == null && reason ? reason : rule;
+  return (
+    <div className="rounded-xl border border-slate-800/80 bg-slate-950/30 p-3">
+      <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+        <StatusDot status={status} />
+        {label}
+      </div>
+      <div className="mt-1 flex items-baseline gap-1">
+        <span className="font-display text-xl font-semibold leading-none text-white">
+          {displayValue}
+        </span>
+        {unit && value != null && <span className="text-xs text-slate-500">{unit}</span>}
+      </div>
+      <div className="mt-1 text-[10px] leading-tight text-slate-500 line-clamp-2">{sub}</div>
+    </div>
+  );
 }
 
 /** The standard time-range slicer used on every page. This year is the default. */
